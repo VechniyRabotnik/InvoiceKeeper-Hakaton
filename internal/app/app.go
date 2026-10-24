@@ -637,6 +637,79 @@ func (a *App) summaryOf(userID int64, assigned bool) (*Totals, error) {
 	return totals, nil
 }
 
+func (a *App) SummaryOnDate(targetDate string) (*Totals, error) {
+	return a.summaryOfDate(0, false, targetDate)
+}
+
+// SummaryAssignedOnDate собирает итоги для конкретного пользователя на указанную дату.
+func (a *App) SummaryAssignedOnDate(userID int64, targetDate string) (*Totals, error) {
+	return a.summaryOfDate(userID, true, targetDate)
+}
+
+func (a *App) summaryOfDate(userID int64, assigned bool, targetDate string) (*Totals, error) {
+	var (
+		list []domain.Occurrence
+		err  error
+	)
+	if assigned {
+		list, err = a.occurrencesAssigned(userID)
+	} else {
+		list, err = a.Occurrences(0)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Если дата не указана, используем сегодня
+	if targetDate == "" {
+		targetDate = a.Today().String()
+	}
+
+	totals := &Totals{Date: targetDate}
+	acc := map[domain.Currency]*CurrencyTotals{}
+	for _, c := range domain.Currencies {
+		acc[c] = &CurrencyTotals{Currency: c}
+	}
+
+	for _, o := range list {
+		// Учитываем только платежи, чей срок равен или предшествует указанной дате
+		if o.DueDate.String() > targetDate {
+			continue
+		}
+
+		totals.Status.Total++
+		c := acc[o.Currency]
+		c.Count++
+		c.Total += o.Amount.Major()
+
+		switch o.Status {
+		case domain.StatusPaid:
+			totals.Status.Paid++
+			c.Paid += o.Amount.Major()
+		case domain.StatusPlanned:
+			totals.Status.Planned++
+			c.Planned += o.Amount.Major()
+			c.Outstanding += o.Amount.Major()
+		case domain.StatusDue:
+			totals.Status.Due++
+			c.Due += o.Amount.Major()
+			c.Outstanding += o.Amount.Major()
+		case domain.StatusOverdue:
+			totals.Status.Overdue++
+			c.Overdue += o.Amount.Major()
+			c.Outstanding += o.Amount.Major()
+		}
+	}
+
+	totals.ByCurrency = make([]CurrencyTotals, 0, len(acc))
+	for _, c := range domain.Currencies {
+		if acc[c].Count > 0 {
+			totals.ByCurrency = append(totals.ByCurrency, *acc[c])
+		}
+	}
+	return totals, nil
+}
+
 // ── Telegram-подписчики ───────────────────────────────────────────────────
 
 // SubscribeChat включает напоминания для чата, /unsubscribe — выключает.

@@ -395,8 +395,10 @@ func handleCommand(svc *app.App, ch Channel, cmd Command) {
 			log.Printf("telegram: ошибка генерации календаря для чата %s: %v", cmd.ChatID, err)
 			reply = "Не удалось сформировать календарь оплат."
 		}
+
 	case "/summary":
-		text, err := summaryText(svc)
+		_, dateArg, _ := strings.Cut(strings.TrimSpace(cmd.Text), " ")
+		text, err := summaryText(svc, dateArg)
 		if err != nil {
 			log.Printf("telegram: итоги для чата %s: %v", cmd.ChatID, err)
 			reply = "Не удалось получить итоги, попробуй позже."
@@ -613,11 +615,23 @@ func startText(chatID string) string {
 }
 
 // summaryText — сводка по всем платежам: итоги по валютам и ближайшие сроки.
-func summaryText(svc *app.App) (string, error) {
-	totals, err := svc.Summary()
+// summaryText — сводка по всем платежам: итоги по валютам и ближайшие сроки.
+func summaryText(svc *app.App, dateArg string) (string, error) {
+	targetDate := strings.TrimSpace(dateArg)
+
+	var totals *app.Totals
+	var err error
+
+	// Если дата передана, считаем итоги на эту дату, иначе — общие итоги как раньше
+	if targetDate != "" {
+		totals, err = svc.SummaryOnDate(targetDate)
+	} else {
+		totals, err = svc.Summary()
+	}
 	if err != nil {
 		return "", err
 	}
+
 	upcoming, err := svc.PendingReminders()
 	if err != nil {
 		return "", err
