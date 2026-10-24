@@ -1,0 +1,30 @@
+[Unit]
+Description=Invoice Keeper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Непривилегированный пользователь: бинарник и база ему принадлежат.
+User=invoicekeeper
+Group=invoicekeeper
+WorkingDirectory=/opt/invoice-keeper
+# Все настройки читаются из .env, поэтому правка без пересборки бинарника.
+EnvironmentFile=/opt/invoice-keeper/.env
+ExecStart=/opt/invoice-keeper/invoice-keeper
+Restart=always
+RestartSec=3
+
+# Ограничения: приложение пишется только в свой каталог.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/invoice-keeper/data
+
+# Пишет в journalctl -u invoice-keeper
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,95 @@
+{{define "users"}}
+<!doctype html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body>
+{{template "header" .}}
+<main>
+<h1>Пользователи</h1>
+{{template "flash" .}}
+
+<div class="card">
+  <h2>Новый пользователь</h2>
+  <form method="post" action="/users" class="row">
+    <div class="field wide">
+      <label for="login">Логин</label>
+      <input id="login" name="login" placeholder="ivan" required minlength="3" autocomplete="off">
+    </div>
+    <div class="field wide">
+      <label for="password">Пароль</label>
+      <input id="password" name="password" type="password" placeholder="минимум 6 символов"
+             required minlength="6" autocomplete="new-password">
+    </div>
+    <button>Создать</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Учётные записи</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Роль</th>
+        <th class="num">Платежей</th>
+        <th>Создан</th>
+        <th>Изменение данных</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Users}}
+      <tr>
+        <td class="muted">{{.ID}}</td>
+        <td>
+          {{if .IsAdmin}}
+            <span class="badge b-paid">администратор</span>
+          {{else}}
+            <span class="badge b-planned">пользователь</span>
+          {{end}}
+        </td>
+        <td class="num">
+          {{if .IsAdmin}}<span class="muted">—</span>
+          {{else if gt .Payments 0}}<a href="/?owner={{.ID}}">{{.Payments}}</a>
+          {{else}}<span class="muted">0</span>{{end}}
+        </td>
+        <td class="muted">{{.CreatedAt.Format "02.01.2006"}}</td>
+        <td>
+          {{if .IsAdmin}}
+            <span class="muted" style="font-size:13px">логин «{{.Login}}» управляется .env</span>
+          {{else}}
+            <form method="post" action="/users/{{.ID}}" class="row">
+              <div class="field">
+                <label for="login-{{.ID}}">Логин</label>
+                <input id="login-{{.ID}}" name="login" value="{{.Login}}" minlength="3" required style="width:160px">
+              </div>
+              <div class="field">
+                <label for="password-{{.ID}}">Новый пароль</label>
+                <input id="password-{{.ID}}" name="password" type="password" placeholder="без изменений"
+                       minlength="6" autocomplete="new-password" style="width:160px">
+              </div>
+              <button class="mini">Сохранить</button>
+            </form>
+          {{end}}
+        </td>
+        <td>
+          {{if not .IsAdmin}}
+          <form method="post" action="/users/{{.ID}}/delete"
+                onsubmit="return confirm('Удалить пользователя {{.Login}}?')">
+            <button class="ghost mini">Удалить</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  <p class="hint">
+    Пустое поле пароля оставляет текущий пароль без изменений. Логин администратора
+    задаётся в <code>.env</code> и через панель не меняется.
+  </p>
+</div>
+</main>
+</body>
+</html>
+{{end}}

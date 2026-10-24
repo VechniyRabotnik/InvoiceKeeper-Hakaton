@@ -1,0 +1,854 @@
+openapi: 3.0.3
+info:
+  title: Invoice Keeper API
+  version: 1.0.0
+  description: |
+    REST API системы учёта регулярных платежей.
+
+    **Авторизация.** Все эндпоинты, кроме `POST /auth/login`, требуют заголовок
+    `Authorization: Bearer <token>`. Токен выдаётся при входе и действует до
+    истечения срока либо до вызова `POST /auth/logout`.
+
+    **Роли.** Администратор задаётся через `.env` (`ADMIN_LOGIN`,
+    `ADMIN_PASSWORD`). Он управляет платежами и пользователями. Обычный
+    пользователь видит платежи и меняет отметку об оплате. Ограничения
+    действуют и в API, и в веб-панели.
+
+    **Даты.** Все даты — календарные, в формате `YYYY-MM-DD`, в едином часовом
+    поясе из `.env`.
+
+    **Суммы.** Передаются в основных единицах валюты (`45000.00`). Итоги
+    считаются отдельно по каждой валюте: конвертации нет.
+  contact:
+    name: Invoice Keeper
+servers:
+  - url: /api/v1
+    description: Текущий сервер
+
+tags:
+  - name: auth
+    description: Аутентификация и сессии
+  - name: payments
+    description: Регулярные платежи
+  - name: occurrences
+    description: Периоды оплат
+  - name: summary
+    description: Итоги по валютам
+  - name: users
+    description: Управление пользователями
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Вход по логину и паролю
+      description: Возвращает JWT для дальнейших запросов. Публичный эндпоинт.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password]
+              properties:
+                login:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  format: password
+                  example: admin
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT для заголовка Authorization
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Текущий пользователь
+      responses:
+        '200':
+          description: Учётная запись из токена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Завершение текущей сессии
+      description: Отзывает текущий токен — повторное использование невозможно.
+      responses:
+        '200':
+          description: Сессия завершена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /recurring-payments:
+    get:
+      tags: [payments]
+      summary: Список регулярных платежей
+      description: По умолчанию возвращаются только активные шаблоны.
+      parameters:
+        - name: all
+          in: query
+          required: false
+          description: '1 — вернуть и остановленные платежи'
+          schema:
+            type: string
+            enum: ['1']
+        - name: user_id
+          in: query
+          required: false
+          description: Ограничить платежами ответственного
+          schema:
+            type: integer
+            format: int64
+        - name: unassigned
+          in: query
+          required: false
+          description: '1 — только платежи без ответственного'
+          schema:
+            type: string
+            enum: ['1']
+      responses:
+        '200':
+          description: Платежи
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecurringPayment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [payments]
+      summary: Создание регулярного платежа
+      description: |
+        Доступно только администратору. Вместе с шаблоном создаются его периоды;
+        если ближайший срок наступает раньше чем через 3 дня, напоминание уходит
+        при ближайшей проверке бота. Необязательное `user_id` закрепляет платёж
+        за ответственным.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentInput'
+      responses:
+        '201':
+          description: Платёж создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringPayment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /recurring-payments/{id}:
+    get:
+      tags: [payments]
+      summary: Конкретный регулярный платёж
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Платёж
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringPayment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [payments]
+      summary: Изменение регулярного платежа
+      description: |
+        Доступно только администратору. Меняются только переданные поля.
+        Смена `first_due_date` или `period` пересобирает будущие периоды
+        шаблона; оплаченные периоды остаются нетронутыми.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentPatch'
+      responses:
+        '200':
+          description: Обновлённый платёж
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringPayment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [payments]
+      summary: Прекращение регулярного платежа
+      description: |
+        Доступно только администратору. Платёж перестаёт напоминать и создавать
+        новые периоды, история оплат сохраняется.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Платёж прекращён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /recurring-payments/{id}/assign:
+    put:
+      tags: [payments]
+      summary: Назначение ответственного
+      description: |
+        Доступно только администратору. Все периоды шаблона наследуют
+        ответственного; `user_id: 0` снимает привязку.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  example: 2
+      responses:
+        '200':
+          description: Обновлённый платёж
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringPayment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /recurring-payments/{id}/resume:
+    post:
+      tags: [payments]
+      summary: Возобновление остановленного платежа
+      description: |
+        Доступно только администратору. Платёж снова создаёт периоды и
+        напоминает о себе; пропущенные за время паузы периоды добавляются.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Платёж возобновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringPayment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /payment-occurrences:
+    get:
+      tags: [occurrences]
+      summary: Список периодов оплат
+      description: |
+        Возвращает периоды с вычисленным статусом: `planned`, `due`, `overdue`,
+        `paid`. Статус не хранится в БД и пересчитывается из `due_date` и
+        `paid_at` при каждом запросе.
+      parameters:
+        - name: payment_id
+          in: query
+          required: false
+          description: Ограничить периоды одним регулярным платежом
+          schema:
+            type: integer
+            format: int64
+        - name: user_id
+          in: query
+          required: false
+          description: Ограничить периодами ответственного
+          schema:
+            type: integer
+            format: int64
+        - name: unassigned
+          in: query
+          required: false
+          description: '1 — только периоды платежей без ответственного'
+          schema:
+            type: string
+            enum: ['1']
+      responses:
+        '200':
+          description: Периоды
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Occurrence'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /payment-occurrences/{id}:
+    get:
+      tags: [occurrences]
+      summary: Конкретный период
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Период
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Occurrence'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [occurrences]
+      summary: Подтверждение, исправление или отмена оплаты, перенос срока
+      description: |
+        Доступно любому аутентифицированному пользователю.
+
+        - `{"paid_at": "2026-11-03"}` — подтвердить оплату фактической датой;
+        - другая дата — исправить фактическую дату, статус и просрочка
+          пересчитываются автоматически;
+        - `{"paid_at": null}` или `{"paid_at": ""}` — снять отметку, дата
+          очищается, период снова становится неоплаченным;
+        - `{"due_date": "2026-12-05"}` — перенести срок этого периода, не
+          меняя шаблон; напоминание по новой дате уходит заново.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                paid_at:
+                  type: string
+                  nullable: true
+                  description: Фактическая дата оплаты или null/"" для отмены
+                  example: '2026-11-03'
+                due_date:
+                  type: string
+                  format: date
+                  description: Новый срок этого периода
+                  example: '2026-12-05'
+      responses:
+        '200':
+          description: Обновлённый период
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Occurrence'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /payments/summary:
+    get:
+      tags: [summary]
+      summary: Итоги по валютам
+      description: |
+        Суммы по каждой валюте отдельно (RUB, USD, EUR) и количество периодов по
+        статусам. Конвертация между валютами не выполняется.
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          description: Считать итоги только по платежам ответственного
+          schema:
+            type: integer
+            format: int64
+        - name: unassigned
+          in: query
+          required: false
+          description: '1 — только платежи без ответственного'
+          schema:
+            type: string
+            enum: ['1']
+      responses:
+        '200':
+          description: Итоги
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Summary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users:
+    get:
+      tags: [users]
+      summary: Список пользователей
+      description: Доступно только администратору.
+      responses:
+        '200':
+          description: Учётные записи
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [users]
+      summary: Создание обычного пользователя
+      description: Доступно только администратору.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password]
+              properties:
+                login:
+                  type: string
+                  minLength: 3
+                  example: ivan
+                password:
+                  type: string
+                  format: password
+                  minLength: 6
+                  example: secret123
+      responses:
+        '201':
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Логин уже занят
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{id}:
+    patch:
+      tags: [users]
+      summary: Изменение пользователя
+      description: |
+        Доступно только администратору. Пустые поля не меняются. Учётная запись
+        администратора защищена — она управляется через `.env`.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                login:
+                  type: string
+                  minLength: 3
+                password:
+                  type: string
+                  format: password
+                  minLength: 6
+      responses:
+        '200':
+          description: Обновлённый пользователь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Логин уже занят
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [users]
+      summary: Удаление пользователя
+      description: |
+        Доступно только администратору. Администратора удалить нельзя.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Пользователь удалён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Требуется авторизация или токен недействителен
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Недостаточно прав
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Запись не найдена
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequests:
+      description: |
+        Слишком много неудачных попыток входа с одного адреса. Заголовок
+        `Retry-After` содержит время ожидания в секундах.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Через сколько секунд можно повторить попытку
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: запись не найдена
+
+    Message:
+      type: object
+      properties:
+        message:
+          type: string
+          example: сессия завершена
+
+    Currency:
+      type: string
+      enum: [RUB, USD, EUR]
+
+    Period:
+      type: string
+      enum: [monthly, weekly, quarterly, half-year, yearly]
+      description: Ежемесячное повторение обязательно по условию кейса, остальные — расширение.
+
+    Status:
+      type: string
+      enum: [planned, due, overdue, paid]
+      description: |
+        `planned` — срок ещё не наступил; `due` — срок сегодня;
+        `overdue` — со следующего дня после срока; `paid` — оплата подтверждена.
+
+    Role:
+      type: string
+      enum: [admin, user]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        login:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        created_at:
+          type: string
+          format: date-time
+
+    RecurringPayment:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          example: Аренда офиса
+        amount:
+          type: number
+          format: double
+          example: 45000
+        currency:
+          $ref: '#/components/schemas/Currency'
+        period:
+          $ref: '#/components/schemas/Period'
+        first_due_date:
+          type: string
+          format: date
+          example: '2026-11-01'
+        active:
+          type: boolean
+        user_id:
+          type: integer
+          format: int64
+          description: Ответственный за платёж; отсутствует, если не назначен
+        user_name:
+          type: string
+          description: Логин ответственного
+        created_at:
+          type: string
+          format: date-time
+
+    PaymentInput:
+      type: object
+      required: [name, amount, currency, period, due_date]
+      properties:
+        name:
+          type: string
+          example: Аренда офиса
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          example: 45000
+        currency:
+          $ref: '#/components/schemas/Currency'
+        period:
+          $ref: '#/components/schemas/Period'
+        due_date:
+          type: string
+          format: date
+          description: Ближайший срок оплаты
+          example: '2026-11-01'
+        user_id:
+          type: integer
+          format: int64
+          description: Ответственный за платёж
+
+    PaymentPatch:
+      type: object
+      description: Все поля необязательны — меняются только переданные.
+      properties:
+        name:
+          type: string
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+        currency:
+          $ref: '#/components/schemas/Currency'
+        period:
+          $ref: '#/components/schemas/Period'
+        due_date:
+          type: string
+          format: date
+          description: Новый первый срок; будущие периоды пересчитываются
+        user_id:
+          type: integer
+          format: int64
+
+    Occurrence:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        payment_id:
+          type: integer
+          format: int64
+        payment_name:
+          type: string
+        amount:
+          type: number
+          format: double
+        currency:
+          $ref: '#/components/schemas/Currency'
+        period:
+          $ref: '#/components/schemas/Period'
+        due_date:
+          type: string
+          format: date
+          description: Срок оплаты периода
+        paid_at:
+          type: string
+          format: date
+          nullable: true
+          description: Фактическая дата оплаты; null — период не оплачен
+        reminder_sent:
+          type: boolean
+          description: Напоминание уже отправлено (защита от дублей)
+        user_id:
+          type: integer
+          format: int64
+          description: Ответственный за платёж, унаследованный от шаблона
+        user_name:
+          type: string
+          description: Логин ответственного
+        status:
+          $ref: '#/components/schemas/Status'
+
+    CurrencyTotals:
+      type: object
+      properties:
+        currency:
+          $ref: '#/components/schemas/Currency'
+        planned:
+          type: number
+          description: Сумма периодов с ненаступившим сроком
+        due:
+          type: number
+          description: Сумма периодов со сроком сегодня
+        overdue:
+          type: number
+          description: Сумма просроченных периодов
+        paid:
+          type: number
+          description: Сумма оплаченных периодов
+        outstanding:
+          type: number
+          description: Неоплаченная сумма (planned + due + overdue)
+        total:
+          type: number
+          description: Сумма всех периодов
+        count:
+          type: integer
+          description: Количество периодов
+
+    StatusTotals:
+      type: object
+      properties:
+        planned:
+          type: integer
+        due:
+          type: integer
+        overdue:
+          type: integer
+        paid:
+          type: integer
+        total:
+          type: integer
+
+    Summary:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          description: Дата, на которую рассчитаны итоги
+        status:
+          $ref: '#/components/schemas/StatusTotals'
+        by_currency:
+          type: array
+          description: Итоги отдельно по каждой валюте; валюты не складываются
+          items:
+            $ref: '#/components/schemas/CurrencyTotals'

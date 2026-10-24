@@ -1,0 +1,202 @@
+{{define "payments"}}
+<!doctype html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body>
+{{template "header" .}}
+<main>
+<h1>Шаблоны платежей</h1>
+{{template "flash" .}}
+
+<div class="card">
+  <h2>Новый платёж</h2>
+  <form method="post" action="/payments" class="row">
+    <div class="field wide">
+      <label for="name">Название</label>
+      <input id="name" name="name" placeholder="Аренда офиса" required>
+    </div>
+    <div class="field mid">
+      <label for="amount">Сумма</label>
+      <input id="amount" name="amount" type="number" step="0.01" min="0.01" placeholder="45000.00" required>
+    </div>
+    <div class="field narrow">
+      <label for="currency">Валюта</label>
+      <select id="currency" name="currency">
+        {{range .Currencies}}<option value="{{.}}">{{.}}</option>{{end}}
+      </select>
+    </div>
+    <div class="field mid">
+      <label for="period">Периодичность</label>
+      <select id="period" name="period">
+        {{range .Periods}}<option value="{{.}}">{{periodLabel .}}</option>{{end}}
+      </select>
+    </div>
+    <div class="field mid">
+      <label for="due_date">Ближайший срок</label>
+      <input id="due_date" name="due_date" type="date" value="{{.Today}}" required>
+    </div>
+    <div class="field mid">
+      <label for="user_id">Ответственный</label>
+      <select id="user_id" name="user_id">
+        <option value="0">не назначен</option>
+        {{range .Users}}<option value="{{.ID}}">{{.Login}}</option>{{end}}
+      </select>
+    </div>
+    <button>Добавить</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Все шаблоны</h2>
+  {{if .Payments}}
+  <table>
+    <thead>
+      <tr>
+        <th>Название</th>
+        <th class="num">Сумма</th>
+        <th>Периодичность</th>
+        <th>Первый срок</th>
+        <th>Ответственный</th>
+        <th>Состояние</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Payments}}
+      <tr>
+        <td>{{.Name}}</td>
+        <td class="num">{{.Currency}} {{printf "%.2f" .Amount.Major}}</td>
+        <td class="muted">{{periodLabel .Period}}</td>
+        <td>{{.FirstDue}}</td>
+        <td>
+          <form method="post" action="/payments/{{.ID}}/owner" class="inline">
+            <select class="owner-select" name="user_id">
+              <option value="0" {{if eq .UserID 0}}selected{{end}}>не назначен</option>
+              {{$assigned := .UserID}}
+              {{range $.Users}}
+              <option value="{{.ID}}" {{if eq $assigned .ID}}selected{{end}}>{{.Login}}</option>
+              {{end}}
+            </select>
+            <button class="mini ghost">Назначить</button>
+          </form>
+        </td>
+        <td>
+          {{if .Active}}<span class="badge b-paid">активен</span>{{else}}<span class="badge b-off">остановлен</span>{{end}}
+        </td>
+        <td>
+          <div class="inline">
+            <a class="nowrap" href="/payments/{{.ID}}/edit"><button class="mini ghost" type="button">Изменить</button></a>
+            {{if .Active}}
+            <form method="post" action="/payments/{{.ID}}/stop"
+                  onsubmit="return confirm('Прекратить платёж? История оплат сохранится, напоминания остановятся.')">
+              <button class="ghost mini">Прекратить</button>
+            </form>
+            {{else}}
+            <form method="post" action="/payments/{{.ID}}/resume">
+              <button class="mini">Возобновить</button>
+            </form>
+            {{end}}
+          </div>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <div class="empty">Шаблонов пока нет</div>
+  {{end}}
+</div>
+</main>
+</body>
+</html>
+{{end}}
+
+{{define "payment-edit"}}
+<!doctype html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body>
+{{template "header" .}}
+<main>
+<h1>Изменение платежа «{{.Payment.Name}}»</h1>
+{{template "flash" .}}
+
+<div class="card">
+  <form method="post" action="/payments/{{.Payment.ID}}" class="row">
+    <div class="field wide">
+      <label for="name">Название</label>
+      <input id="name" name="name" value="{{.Payment.Name}}" required>
+    </div>
+    <div class="field mid">
+      <label for="amount">Сумма</label>
+      <input id="amount" name="amount" type="number" step="0.01" min="0.01"
+             value="{{printf "%.2f" .Payment.Amount.Major}}" required>
+    </div>
+    <div class="field narrow">
+      <label for="currency">Валюта</label>
+      <select id="currency" name="currency">
+        {{$current := .Payment.Currency}}
+        {{range .Currencies}}
+        <option value="{{.}}" {{if eq (printf "%s" $current) (printf "%s" .)}}selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="field mid">
+      <label for="period">Периодичность</label>
+      <select id="period" name="period">
+        {{$period := .Payment.Period}}
+        {{range .Periods}}
+        <option value="{{.}}" {{if eq (printf "%s" $period) (printf "%s" .)}}selected{{end}}>{{periodLabel .}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="field mid">
+      <label for="due_date">Первый срок</label>
+      <input id="due_date" name="due_date" type="date" value="{{.Payment.FirstDue}}" required>
+    </div>
+    <div class="field mid">
+      <label for="user_id">Ответственный</label>
+      <select id="user_id" name="user_id">
+        {{$assigned := .Payment.UserID}}
+        <option value="0">не назначен</option>
+        {{range .Users}}
+        <option value="{{.ID}}" {{if eq $assigned .ID}}selected{{end}}>{{.Login}}</option>
+        {{end}}
+      </select>
+    </div>
+    <button>Сохранить</button>
+  </form>
+  <p class="hint">
+    Смена первого срока или периодичности пересобирает будущие периоды;
+    оплаченные периоды и история оплат остаются без изменений.
+  </p>
+</div>
+
+<div class="card">
+  <h2>История периодов</h2>
+  {{if .Rows}}
+  <table>
+    <thead>
+      <tr><th>Срок</th><th>Статус</th><th>Оплачено</th><th class="num">Сумма</th></tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td>{{.DueDate}}</td>
+        <td><span class="badge b-{{.Status}}">{{.StatusLabel}}</span></td>
+        <td>{{if .PaidAt}}{{.PaidAt}}{{else}}<span class="muted">—</span>{{end}}</td>
+        <td class="num">{{.Amount}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <div class="empty">Периодов нет</div>
+  {{end}}
+</div>
+
+<p class="hint"><a href="/payments">← Назад к шаблонам</a></p>
+</main>
+</body>
+</html>
+{{end}}

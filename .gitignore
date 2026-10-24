@@ -27,6 +27,12 @@ go.work.sum
 
 # env file
 .env
+!.env.example
+
+# Локальная база SQLite (файл + WAL/SHM) и собранный бинарник
+data/
+/invoice-keeper
+/invoice-keeper.exe
 
 # Editor/IDE
 # .idea/

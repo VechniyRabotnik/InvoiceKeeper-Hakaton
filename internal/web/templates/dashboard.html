@@ -1,0 +1,140 @@
+{{define "dashboard"}}
+<!doctype html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body>
+{{template "header" .}}
+<main>
+<h1>Регулярные платежи <small>на {{.Today}}</small></h1>
+{{template "flash" .}}
+
+<div class="grid" style="margin-bottom:20px">
+  {{range .Summary.ByCurrency}}
+  <div class="stat">
+    <div class="k">{{.Currency}} · {{.Count}} периодов</div>
+    <div class="v">{{printf "%.2f" .Total}} <small>{{.Currency}}</small></div>
+    <div class="muted" style="font-size:13px;margin-top:8px">
+      оплачено {{printf "%.2f" .Paid}} · к оплате {{printf "%.2f" .Outstanding}}
+    </div>
+    {{if gt .Overdue 0.0}}
+    <div class="late" style="margin-top:4px">просрочено {{printf "%.2f" .Overdue}}</div>
+    {{end}}
+  </div>
+  {{end}}
+  <div class="stat">
+    <div class="k">Статусы · {{.Summary.Status.Total}} периодов</div>
+    <div class="v badges">
+      <span class="badge b-paid">оплачено {{.Summary.Status.Paid}}</span>
+      <span class="badge b-due">срок сегодня {{.Summary.Status.Due}}</span>
+      <span class="badge b-overdue">просрочено {{.Summary.Status.Overdue}}</span>
+      <span class="badge b-planned">ожидает {{.Summary.Status.Planned}}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Периоды оплат</h2>
+    <div class="spacer"></div>
+    <form method="get" action="/" class="filters">
+      <label for="owner">Ответственный</label>
+      <select id="owner" name="owner" onchange="this.form.submit()">
+        <option value="all" {{if eq .Owner "all"}}selected{{end}}>Все платежи</option>
+        <option value="none" {{if eq .Owner "none"}}selected{{end}}>Без ответственного</option>
+        {{$owner := .Owner}}
+        {{range .Users}}
+        <option value="{{.ID}}" {{if eq $owner (printf "%d" .ID)}}selected{{end}}>{{.Login}}</option>
+        {{end}}
+      </select>
+      <noscript><button class="mini ghost">Применить</button></noscript>
+    </form>
+  </div>
+
+  {{if .Rows}}
+  <table>
+    <thead>
+      <tr>
+        <th>Платёж</th>
+        <th class="num">Сумма</th>
+        <th>Ответственный</th>
+        <th>Срок</th>
+        <th>Статус</th>
+        <th>Оплачено</th>
+        <th>Просрочка</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td>{{.PaymentName}}</td>
+        <td class="num">{{.Amount}}</td>
+        <td>
+          {{if $.IsAdmin}}
+          <div class="inline">
+            <form method="post" action="/occurrences/{{.ID}}/owner">
+              <select class="owner-select" name="user_id">
+                <option value="0" {{if eq .UserID 0}}selected{{end}}>не назначен</option>
+                {{$assigned := .UserID}}
+                {{range $.Users}}
+                <option value="{{.ID}}" {{if eq $assigned .ID}}selected{{end}}>{{.Login}}</option>
+                {{end}}
+              </select>
+              <input type="hidden" name="owner" value="{{$.OwnerQuery}}">
+              <button class="mini ghost">Назначить</button>
+            </form>
+          </div>
+          {{else}}
+            {{if .UserName}}<span class="badge b-owner">{{.UserName}}</span>{{else}}<span class="muted">—</span>{{end}}
+          {{end}}
+        </td>
+        <td>
+          {{if $.IsAdmin}}
+          <form method="post" action="/occurrences/{{.ID}}/due" class="inline">
+            <input type="date" name="due_date" value="{{.DueDate}}">
+            <input type="hidden" name="owner" value="{{$.OwnerQuery}}">
+            <button class="mini ghost" title="Перенести срок этого периода">Срок</button>
+          </form>
+          {{else}}{{.DueDate}}{{end}}
+        </td>
+        <td><span class="badge b-{{.Status}}">{{.StatusLabel}}</span></td>
+        <td>{{if .PaidAt}}{{.PaidAt}}{{else}}<span class="muted">—</span>{{end}}</td>
+        <td>{{if .Overdue}}<span class="late">{{.Overdue}}</span>{{else}}<span class="onTime">—</span>{{end}}</td>
+        <td>
+          <div class="stacked">
+            <form method="post" action="/occurrences/{{.ID}}/paid">
+              <div class="inline">
+                <input type="date" name="paid_at" value="{{if .PaidAt}}{{.PaidAt}}{{else}}{{$.Today}}{{end}}">
+                <input type="hidden" name="owner" value="{{$.OwnerQuery}}">
+                <button class="mini" title="Отметить оплату указанной датой">Оплачено</button>
+              </div>
+            </form>
+            {{if .IsPaid}}
+            <form method="post" action="/occurrences/{{.ID}}/paid">
+              <input type="hidden" name="paid_at" value="">
+              <input type="hidden" name="owner" value="{{$.OwnerQuery}}">
+              <button class="ghost mini" title="Снять отметку об оплате">Снять</button>
+            </form>
+            {{end}}
+          </div>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <div class="empty">Платежей по этому фильтру нет</div>
+  {{end}}
+</div>
+
+{{if .IsAdmin}}
+<p class="hint">
+  Ответственный закрепляется за шаблоном на вкладке <a href="/payments">Шаблоны</a> —
+  все его периоды наследуют привязку. Здесь назначить можно сразу для периода:
+  изменение применяется к шаблону платежа.
+</p>
+{{end}}
+</main>
+</body>
+</html>
+{{end}}

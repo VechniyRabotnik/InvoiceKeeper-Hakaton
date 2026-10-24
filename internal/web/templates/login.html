@@ -1,0 +1,32 @@
+{{define "login"}}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход · Invoice Keeper</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="centered">
+  <div class="box">
+    <div class="brand big">Invoice<span>Keeper</span></div>
+    <p class="sub">Контроль регулярных платежей</p>
+    {{if .Error}}<div class="flash">{{.Error}}</div>{{end}}
+    <div class="card">
+      <form method="post" action="/login">
+        <div class="field">
+          <label for="login">Логин</label>
+          <input id="login" name="login" {{if .Login}}value="{{.Login}}"{{end}} autocomplete="username" autofocus required>
+        </div>
+        <div class="field" style="margin-bottom:18px">
+          <label for="password">Пароль</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button>Войти</button>
+      </form>
+    </div>
+    <p class="hint" style="text-align:center">Администратор задаётся в <code>.env</code></p>
+  </div>
+</body>
+</html>
+{{end}}

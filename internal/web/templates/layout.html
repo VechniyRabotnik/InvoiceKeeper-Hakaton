@@ -1,0 +1,31 @@
+{{/* Каркас страниц: <head> со стилями, шапка с навигацией и блоки-подсказки.
+     Стили лежат в static/style.css и отдаются сервером, а не инлайном. */}}
+
+{{define "head"}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Invoice Keeper</title>
+<link rel="stylesheet" href="/static/style.css">
+{{end}}
+
+{{define "header"}}
+<header>
+  <div class="brand">Invoice<span>Keeper</span></div>
+  <nav>
+    <a href="/" {{if eq .Active "dashboard"}}class="active"{{end}}>Платежи</a>
+    {{if .IsAdmin}}
+    <a href="/payments" {{if eq .Active "payments"}}class="active"{{end}}>Шаблоны</a>
+    <a href="/users" {{if eq .Active "users"}}class="active"{{end}}>Пользователи</a>
+    {{end}}
+    <a href="/api/v1/docs" target="_blank">API</a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="who"><b>{{.User.Login}}</b> · {{if eq .User.Role "admin"}}администратор{{else}}пользователь{{end}}</div>
+  <form method="post" action="/logout"><button class="ghost mini">Выйти</button></form>
+</header>
+{{end}}
+
+{{define "flash"}}
+{{if .Error}}<div class="flash">{{.Error}}</div>{{end}}
+{{if .Notice}}<div class="flash ok">{{.Notice}}</div>{{end}}
+{{end}}

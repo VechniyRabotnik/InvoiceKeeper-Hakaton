@@ -1,0 +1,17 @@
+services:
+  invoice-keeper:
+    build: .
+    image: invoice-keeper:latest
+    container_name: invoice-keeper
+    restart: unless-stopped
+    # Настройки берутся из .env рядом с этим файлом. Без него контейнер
+    # стартует на значениях по умолчанию, поэтому required: false.
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      # Наружу отдаём только локальный интерфейс: публичный доступ — через nginx.
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # База переживает пересборку образа.
+      - ./data:/app/data
