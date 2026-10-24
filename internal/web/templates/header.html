@@ -1,0 +1,23 @@
+{{define "header"}}
+<header class="payday-header">
+  <a href="/" class="payday-brand">
+    <div class="payday-logo-icon">$</div>
+    <span>PayDay</span>
+  </a>
+
+  <nav class="payday-nav-pills">
+    <a href="/" class="active">Платежи</a>
+    <a href="/payments">Шаблоны</a>
+    <a href="/calendar">Календарь</a>
+    <a href="/budget">Бюджет</a>
+  </nav>
+
+  <div class="payday-user-profile">
+    <div class="user-avatar">{{if .User}}{{slice .User.Login 0 1}}{{else}}A{{end}}</div>
+    <span>{{if .User}}{{.User.Login}}{{else}}Администратор{{end}}</span>
+    <form method="post" action="/logout" style="margin:0">
+      <button class="logout-btn">Выйти</button>
+    </form>
+  </div>
+</header>
+{{end}}

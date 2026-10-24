@@ -4,29 +4,334 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Вход · Invoice Keeper</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <title>PayDay · Вход в панель</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f3f0f8;
+      color: #111;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 36px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Шапка */
+    header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 17px;
+      color: #111;
+    }
+
+    .logo-badge {
+      width: 24px;
+      height: 24px;
+      background: #18191c;
+      color: #fff;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+
+    /* Контейнер из двух колонок */
+    .page-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 560px 1fr;
+      gap: 60px;
+      align-items: center;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* Левая темная плашка */
+    .hero-card {
+      background: #212226;
+      color: #fff;
+      border-radius: 28px;
+      padding: 44px;
+      min-height: 540px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+    }
+
+    .badge-tg {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 6px 14px;
+      border-radius: 99px;
+      font-size: 12px;
+      color: #a3a8b5;
+    }
+
+    .hero-title {
+      font-size: 48px;
+      line-height: 1.08;
+      font-weight: 500;
+      letter-spacing: -1px;
+      margin: 32px 0 18px;
+    }
+
+    .hero-title span {
+      color: #c0b2fc;
+    }
+
+    .hero-sub {
+      color: #9398a6;
+      font-size: 14.5px;
+      line-height: 1.5;
+      max-width: 420px;
+    }
+
+    /* Табло валют */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 1fr;
+      gap: 12px;
+      margin-top: 36px;
+    }
+
+    .stat-box {
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .stat-box.primary {
+      background: #c0b2fc;
+      color: #111;
+    }
+
+    .stat-lbl {
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      opacity: 0.65;
+    }
+
+    .stat-val {
+      font-size: 20px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Правая колонка входа */
+    .form-wrapper {
+      max-width: 380px;
+      width: 100%;
+    }
+
+    .form-wrapper h1 {
+      font-size: 36px;
+      font-weight: 500;
+      letter-spacing: -0.8px;
+      color: #111;
+      margin-bottom: 8px;
+    }
+
+    .form-wrapper p.desc {
+      color: #727785;
+      font-size: 14px;
+      margin-bottom: 30px;
+    }
+
+    .field-group {
+      margin-bottom: 20px;
+    }
+
+    .field-group label {
+      display: block;
+      font-size: 12.5px;
+      color: #727785;
+      margin-bottom: 6px;
+    }
+
+    .input-wrap {
+      position: relative;
+    }
+
+    .field-group input {
+      width: 100%;
+      height: 48px;
+      background: #ffffff;
+      border: 1px solid #e2def2;
+      border-radius: 99px;
+      padding: 0 20px;
+      font-size: 15px;
+      color: #111;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .field-group input:focus {
+      border-color: #c0b2fc;
+      box-shadow: 0 0 0 3px rgba(192, 178, 252, 0.25);
+    }
+
+    .pwd-btn {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: #8a8f9e;
+      cursor: pointer;
+      display: flex;
+      padding: 4px;
+    }
+
+    .btn-submit {
+      width: 100%;
+      height: 48px;
+      background: #c0b2fc;
+      color: #111;
+      border: none;
+      border-radius: 99px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.2s;
+    }
+
+    .btn-submit:hover {
+      background: #b0a0fa;
+    }
+
+    .sec-note {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #838896;
+      font-size: 12.5px;
+      margin-top: 24px;
+    }
+
+    .flash-err {
+      background: #fde8e8;
+      color: #c81e1e;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+  </style>
 </head>
-<body class="centered">
-  <div class="box">
-    <div class="brand big">Invoice<span>Keeper</span></div>
-    <p class="sub">Контроль регулярных платежей</p>
-    {{if .Error}}<div class="flash">{{.Error}}</div>{{end}}
-    <div class="card">
-      <form method="post" action="/login">
-        <div class="field">
-          <label for="login">Логин</label>
-          <input id="login" name="login" {{if .Login}}value="{{.Login}}"{{end}} autocomplete="username" autofocus required>
-        </div>
-        <div class="field" style="margin-bottom:18px">
-          <label for="password">Пароль</label>
-          <input id="password" name="password" type="password" autocomplete="current-password" required>
-        </div>
-        <button>Войти</button>
-      </form>
+<body>
+
+  <header>
+    <div class="logo">
+      <div class="logo-badge">$</div>
+      PayDay
     </div>
-    <p class="hint" style="text-align:center">Администратор задаётся в <code>.env</code></p>
+  </header>
+
+  <div class="page-layout">
+    <!-- Левая темная витрина -->
+    <div class="hero-card">
+      <div>
+        <div class="badge-tg">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+          Напоминания в Telegram за 3 дня до срока
+        </div>
+
+        <div class="hero-title">
+          Ни один платёж<br>не будет <span>забыт</span>
+        </div>
+
+        <div class="hero-sub">
+          Аренда, серверы, подписки — все регулярные расходы в одном месте. Отмечайте оплату и следите за просрочками.
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-box primary">
+          <div class="stat-lbl">К оплате · RUB</div>
+          <div class="stat-val">₽ 124 390</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-lbl">К оплате · USD</div>
+          <div class="stat-val">$ 157</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-lbl">К оплате · EUR</div>
+          <div class="stat-val">€ 105</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Правая форма входа -->
+    <div class="form-wrapper">
+      <h1>Вход в панель</h1>
+      <p class="desc">Введите логин и пароль, выданные администратором</p>
+
+      {{if .Error}}
+      <div class="flash-err">{{.Error}}</div>
+      {{end}}
+
+      <form method="post" action="/login">
+        <div class="field-group">
+          <label for="login">Логин</label>
+          <input id="login" name="login" type="text" {{if .Login}}value="{{.Login}}"{{end}} autocomplete="username" autofocus required>
+        </div>
+
+        <div class="field-group">
+          <label for="password">Пароль</label>
+          <div class="input-wrap">
+            <input id="password" name="password" type="password" autocomplete="current-password" required>
+            <button type="button" class="pwd-btn" onclick="togglePwd()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-submit">Войти</button>
+      </form>
+
+      <div class="sec-note">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        Без авторизации панель и данные недоступны
+      </div>
+    </div>
   </div>
+
+  <script>
+    function togglePwd() {
+      const el = document.getElementById('password');
+      el.type = el.type === 'password' ? 'text' : 'password';
+    }
+  </script>
 </body>
 </html>
 {{end}}

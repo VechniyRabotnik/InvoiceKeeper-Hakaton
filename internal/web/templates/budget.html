@@ -1,0 +1,207 @@
+{{define "budget"}}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PayDay · Бюджет</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg-page: #f4f1f8;
+      --card-dark: #191a1e;
+      --card-light: #ffffff;
+      --accent-purple: #c4b5fd;
+      --accent-purple-hover: #b4a2f5;
+      --text-dark: #111215;
+      --text-muted: #828796;
+      --border-color: #e5e0ef;
+      --border-dark: #292a30;
+      --danger: #ff6b5b;
+      --success: #3fb950;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-dark);
+      min-height: 100vh;
+      display: flex; flex-direction: column; padding: 24px 36px 48px;
+    }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 18px; color: var(--text-dark); text-decoration: none; }
+    .brand-icon { width: 32px; height: 32px; background: #17181c; color: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
+    
+    .nav-pills { display: flex; align-items: center; background: #17181c; padding: 5px; border-radius: 99px; gap: 3px; }
+    .nav-pills a { color: #8c92a2; text-decoration: none; padding: 7px 18px; font-size: 13px; font-weight: 500; border-radius: 99px; transition: all 0.2s ease; }
+    .nav-pills a.active, .nav-pills a:hover { color: #111; background: var(--accent-purple); }
+
+    .user-badge-pill { background: #ece7f8; border: 1px solid #dcd1f5; padding: 6px 14px; border-radius: 99px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .user-badge-pill b { background: #c4b5fd; color: #2b1f5c; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+
+    .top-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .page-title { font-size: 38px; font-weight: 600; letter-spacing: -1px; }
+
+    .switch-pills { display: flex; background: #fff; border-radius: 99px; padding: 4px; border: 1px solid var(--border-color); gap: 4px; }
+    .switch-pills button { background: none; border: none; padding: 6px 16px; font-size: 13px; font-weight: 500; border-radius: 99px; cursor: pointer; color: var(--text-muted); }
+    .switch-pills button.active { background: var(--card-dark); color: #fff; }
+
+    .currency-cards-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 24px; }
+    
+    .currency-card {
+      background: #fff; border-radius: 24px; padding: 24px; border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .curr-label { font-size: 13px; color: var(--text-muted); font-weight: 500; display: flex; align-items: center; gap: 6px; }
+    .curr-val { font-size: 32px; font-weight: 600; margin: 12px 0 16px; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+
+    .progress-bar-wrap { height: 6px; background: #f0ecf8; border-radius: 99px; overflow: hidden; display: flex; margin-bottom: 16px; }
+    .progress-fill { height: 100%; background: var(--accent-purple); }
+
+    .curr-details { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; border-top: 1px solid #f2eff8; padding-top: 12px; color: var(--text-muted); }
+    .curr-details div { display: flex; justify-content: space-between; }
+
+    .dark-analytics-card {
+      background: var(--card-dark); color: #fff; border-radius: 28px; padding: 28px; display: grid; grid-template-columns: 1fr 340px; gap: 32px;
+    }
+
+    .analytics-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+
+    .currency-toggle-dark { display: flex; background: rgba(255,255,255,0.06); padding: 4px; border-radius: 99px; gap: 4px; }
+    .currency-toggle-dark button { background: none; border: none; color: #828796; padding: 5px 14px; border-radius: 99px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .currency-toggle-dark button.active { background: var(--accent-purple); color: #111; }
+
+    /* Имитация графика расходов по месяцам */
+    .bars-chart { display: flex; align-items: flex-end; justify-content: space-between; height: 200px; padding-top: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .bar-col { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+    .bar-inner { width: 34px; background: var(--accent-purple); border-radius: 8px 8px 0 0; }
+    .bar-inner.orange { background: var(--danger); }
+    .bar-inner.dashed { background: transparent; border: 2px dashed rgba(255,255,255,0.2); }
+    .bar-month { font-size: 11px; color: #828796; }
+    .bar-val { font-size: 9.5px; color: #828796; margin-bottom: 4px; }
+
+    .structure-box { display: flex; flex-direction: column; justify-content: space-between; border-left: 1px solid rgba(255,255,255,0.08); padding-left: 32px; }
+    .struct-item { margin-bottom: 14px; }
+    .struct-title { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+    .struct-bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; }
+    .struct-bar-fill { height: 100%; background: var(--accent-purple); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <a href="/" class="brand"><div class="brand-icon">$</div> PayDay</a>
+    <nav class="nav-pills">
+      <a href="/">Платежи</a>
+      <a href="/calendar">Календарь</a>
+      <a href="/budget" class="active">• Бюджет</a>
+    </nav>
+    <div class="user-badge-pill"><b>{{slice .User.Login 0 1}}</b> <span>{{.User.Login}}</span></div>
+  </header>
+
+  <main>
+    <div class="top-head">
+      <h1 class="page-title">Бюджет</h1>
+      <div style="display:flex; gap:10px;">
+        <div class="switch-pills">
+          <button>Месяц</button>
+          <button class="active">Год</button>
+        </div>
+        <select style="background:#fff; border:1px solid var(--border-color); border-radius:99px; padding:6px 16px; font-weight:600; font-size:13px;">
+          <option>2026</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="currency-cards-grid">
+      <div class="currency-card">
+        <div class="curr-label"><span>₽</span> Рубли · RUB</div>
+        <div class="curr-val">₽ 1 492 680<small style="font-size:18px; font-weight:400">,00</small></div>
+        <div class="progress-bar-wrap"><div class="progress-fill" style="width: 75%;"></div></div>
+        <div class="curr-details">
+          <div><span>Оплачено</span> <span style="color:var(--success)">₽ 1 120 000</span></div>
+          <div><span>Просрочено / Не оплачено</span> <span>₽ 120 000</span></div>
+          <div><span>Запланировано</span> <span>₽ 249 700</span></div>
+        </div>
+      </div>
+
+      <div class="currency-card">
+        <div class="curr-label"><span>$</span> Доллары · USD</div>
+        <div class="curr-val">$ 1 884<small style="font-size:18px; font-weight:400">,00</small></div>
+        <div class="progress-bar-wrap"><div class="progress-fill" style="width: 80%;"></div></div>
+        <div class="curr-details">
+          <div><span>Оплачено</span> <span style="color:var(--success)">$ 1 462</span></div>
+          <div><span>Просрочено / Не оплачено</span> <span>$ 108</span></div>
+          <div><span>Запланировано</span> <span>$ 314</span></div>
+        </div>
+      </div>
+
+      <div class="currency-card">
+        <div class="curr-label"><span>€</span> Евро · EUR</div>
+        <div class="curr-val">€ 1 260<small style="font-size:18px; font-weight:400">,00</small></div>
+        <div class="progress-bar-wrap"><div class="progress-fill" style="width: 85%;"></div></div>
+        <div class="curr-details">
+          <div><span>Оплачено</span> <span style="color:var(--success)">€ 1 005</span></div>
+          <div><span>Просрочено / Не оплачено</span> <span>€ 45</span></div>
+          <div><span>Запланировано</span> <span>€ 210</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dark-analytics-card">
+      <div>
+        <div class="analytics-head">
+          <h2 style="font-size:20px; font-weight:500;">Расходы по месяцам · 2026</h2>
+          <div class="currency-toggle-dark">
+            <button class="active">₽ RUB</button>
+            <button>$ USD</button>
+            <button>€ EUR</button>
+          </div>
+        </div>
+
+        <div class="bars-chart">
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Янв</span></div>
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Фев</span></div>
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Мар</span></div>
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Апр</span></div>
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Май</span></div>
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Июн</span></div>
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Июл</span></div>
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Авг</span></div>
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Сен</span></div>
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner orange" style="height:140px;"></div><span class="bar-month">Окт</span></div>
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner dashed" style="height:120px;"></div><span class="bar-month">Ноя</span></div>
+          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner dashed" style="height:120px;"></div><span class="bar-month">Дек</span></div>
+        </div>
+      </div>
+
+      <div class="structure-box">
+        <div>
+          <div style="font-size:12px; color:#828796; text-transform:uppercase; margin-bottom:16px;">Структура · в месяц</div>
+          
+          <div class="struct-item">
+            <div class="struct-title"><span>Аренда офиса</span> <b>₽ 120 000 · 96%</b></div>
+            <div class="struct-bar"><div class="struct-bar-fill" style="width:96%;"></div></div>
+          </div>
+          <div class="struct-item">
+            <div class="struct-title"><span>Интернет, офис</span> <b>₽ 2 500 · 2%</b></div>
+            <div class="struct-bar"><div class="struct-bar-fill" style="width:2%;"></div></div>
+          </div>
+          <div class="struct-item">
+            <div class="struct-title"><span>Хостинг Дого</span> <b>₽ 1 890 · 2%</b></div>
+            <div class="struct-bar"><div class="struct-bar-fill" style="width:2%;"></div></div>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size:11px; color:#828796;">Итого в месяц</div>
+          <div style="font-size:26px; font-weight:600; margin-top:2px;">₽ 124 390</div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
+{{end}}

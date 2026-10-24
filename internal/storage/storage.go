@@ -101,7 +101,69 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
 	chat_id    TEXT PRIMARY KEY,
 	created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS audit_logs (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id    INTEGER,
+	user_name  TEXT    NOT NULL,
+	type       TEXT    NOT NULL,
+	type_label TEXT    NOT NULL,
+	action     TEXT    NOT NULL,
+	ip_source  TEXT    NOT NULL,
+	created_at TEXT    NOT NULL
+);
 `
+
+// ── Журнал аудита ──────────────────────────────────────────────────────────
+
+func (s *Store) CreateAuditLog(userID *int64, userName, eventType, typeLabel, action, ipSource string) error {
+	var uID any
+	if userID != nil && *userID > 0 {
+		uID = *userID
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO audit_logs (user_id, user_name, type, type_label, action, ip_source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		uID, userName, eventType, typeLabel, action, ipSource, time.Now().UTC().Format(time.RFC3339),
+	)
+	return err
+}
+
+type AuditLogRecord struct {
+	ID        int64
+	UserID    *int64
+	UserName  string
+	Type      string
+	TypeLabel string
+	Action    string
+	IPSource  string
+	CreatedAt time.Time
+}
+
+func (s *Store) ListAuditLogs() ([]AuditLogRecord, error) {
+	rows, err := s.db.Query(`SELECT id, user_id, user_name, type, type_label, action, ip_source, created_at FROM audit_logs ORDER BY id DESC LIMIT 200`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []AuditLogRecord
+	for rows.Next() {
+		var (
+			l       AuditLogRecord
+			uID     sql.NullInt64
+			created string
+		)
+		if err := rows.Scan(&l.ID, &uID, &l.UserName, &l.Type, &l.TypeLabel, &l.Action, &l.IPSource, &created); err != nil {
+			return nil, err
+		}
+		if uID.Valid {
+			idVal := uID.Int64
+			l.UserID = &idVal
+		}
+		l.CreatedAt, _ = time.Parse(time.RFC3339, created)
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
 
 // migrate создаёт схему и доводит до неё старые базы: колонки user_id и
 // tg_chat_id появились позже своих таблиц, поэтому их наличие проверяется явно.

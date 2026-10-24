@@ -60,9 +60,49 @@ func (t *Telegram) Notify(chatID string, o domain.Occurrence, today domain.Day) 
 	}, nil)
 }
 
-// SendText отвечает текстом — используется командами бота.
+// SendText отвечает текстом и прикрепляет постоянную клавиатуру команд.
+func (t *Telegram) SendTextWithOptions(chatID, text string, withKeyboard bool) error {
+	payload := map[string]any{
+		"chat_id": chatID,
+		"text":    text,
+	}
+	if withKeyboard {
+		payload["reply_markup"] = mainKeyboard()
+	}
+	return t.call("sendMessage", payload, nil)
+}
+
+// SendText оставляет обратную совместимость без принудительной клавиатуры.
 func (t *Telegram) SendText(chatID, text string) error {
-	return t.call("sendMessage", map[string]any{"chat_id": chatID, "text": text}, nil)
+	return t.call("sendMessage", map[string]any{
+		"chat_id":      chatID,
+		"text":         text,
+		"reply_markup": mainKeyboard(), // Автоматически добавляем кнопки к каждому ответу бота
+	}, nil)
+}
+
+// mainKeyboard возвращает постоянную Reply-клавиатуру с основными командами.
+func mainKeyboard() map[string]any {
+	return map[string]any{
+		"keyboard": [][]map[string]string{
+			{
+				{"text": "/summary"},
+				{"text": "/payments"},
+				{"text": "/pay"},
+			},
+			{
+				{"text": "/overdue"},
+				{"text": "/calendar"},
+				{"text": "/budget"},
+			},
+			{
+				{"text": "/help"},
+			},
+		},
+		"resize_keyboard": true,
+		"is_persistent":   true,
+		"selective":       false,
+	}
 }
 
 // Updates забирает обновления начиная с offset: и нажатия кнопок, и сообщения

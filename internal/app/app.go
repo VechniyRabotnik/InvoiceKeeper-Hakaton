@@ -112,23 +112,24 @@ func (a *App) DeletePayment(id int64) error {
 
 // ── доступ ────────────────────────────────────────────────────────────────
 
-// Authenticate проверяет пару логин/пароль и возвращает учётную запись.
-// Одинаковая ошибка для «нет такого логина» и «неверный пароль» не даёт
-// проверить существование аккаунта.
+// Authenticate проверяет учетные данные пользователя или администратора
 func (a *App) Authenticate(login, password string) (*domain.User, error) {
-	const bad = "неверный логин или пароль"
+	if strings.TrimSpace(login) == "" || strings.TrimSpace(password) == "" {
+		return nil, fmt.Errorf("укажите логин и пароль")
+	}
 
-	u, err := a.store.UserByLogin(login)
+	// Ищем пользователя по логину в базе данных
+	user, err := a.store.UserByLogin(login)
 	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			return nil, errors.New(bad)
-		}
-		return nil, err
+		return nil, fmt.Errorf("неверный логин или пароль")
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
-		return nil, errors.New(bad)
+
+	// Сверяем пароль через bcrypt с хэшем в базе
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return nil, fmt.Errorf("неверный логин или пароль")
 	}
-	return u, nil
+
+	return user, nil
 }
 
 // RevokeSession вносит сессию в чёрный список: logout делает выданный токен
@@ -158,6 +159,30 @@ func (a *App) CreateUser(login string) (*domain.User, error) {
 		return nil, err
 	}
 	return a.store.UserByID(id)
+}
+
+// CreateUserWithPassword — корректное создание пользователя с хэшированием пароля
+func (a *App) CreateUserWithPassword(login, password string) (*domain.User, error) {
+	if strings.TrimSpace(login) == "" {
+		return nil, domain.Invalid("логин не может быть пустым")
+	}
+	if len(password) < 4 {
+		return nil, domain.Invalid("пароль должен быть не менее 4 символов")
+	}
+
+	// Обязательно генерируем bcrypt-хэш для пароля обычного пользователя!
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+
+	// Сохраняем пользователя с реальным хэшем в базе
+	userID, err := a.store.CreateUser(login, string(hash), string(domain.RoleUser))
+	if err != nil {
+		return nil, err
+	}
+
+	return a.store.UserByID(userID)
 }
 
 func (a *App) Users() ([]domain.User, error) { return a.store.ListUsers() }
@@ -215,6 +240,42 @@ func validateCredentials(login, password string) error {
 		return domain.Invalid("password must be at least 6 characters")
 	}
 	return nil
+}
+
+type AuditLog struct {
+	ID        int64
+	UserID    *int64
+	UserName  string
+	Type      string
+	TypeLabel string
+	Action    string
+	IPSource  string
+	CreatedAt time.Time
+}
+
+func (a *App) LogEvent(userID *int64, userName, eventType, typeLabel, action, ipSource string) {
+	_ = a.store.CreateAuditLog(userID, userName, eventType, typeLabel, action, ipSource)
+}
+
+func (a *App) AuditLogs() ([]AuditLog, error) {
+	records, err := a.store.ListAuditLogs()
+	if err != nil {
+		return nil, err
+	}
+	var out []AuditLog
+	for _, r := range records {
+		out = append(out, AuditLog{
+			ID:        r.ID,
+			UserID:    r.UserID,
+			UserName:  r.UserName,
+			Type:      r.Type,
+			TypeLabel: r.TypeLabel,
+			Action:    r.Action,
+			IPSource:  r.IPSource,
+			CreatedAt: r.CreatedAt,
+		})
+	}
+	return out, nil
 }
 
 // ── регулярные платежи ────────────────────────────────────────────────────

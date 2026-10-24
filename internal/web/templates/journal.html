@@ -1,0 +1,198 @@
+{{define "journal"}}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PayDay · Журнал действий</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg-page: #f4f1f8;
+      --card-dark: #191a1e;
+      --card-light: #ffffff;
+      --accent-purple: #c4b5fd;
+      --accent-purple-hover: #b4a2f5;
+      --text-dark: #111215;
+      --text-muted: #828796;
+      --border-color: #e5e0ef;
+      --border-dark: #292a30;
+      --danger: #ff6b5b;
+      --success: #3fb950;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-dark);
+      min-height: 100vh;
+      display: flex; flex-direction: column; padding: 24px 36px 48px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 18px; color: var(--text-dark); text-decoration: none; }
+    .brand-icon { width: 32px; height: 32px; background: #17181c; color: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
+
+    .nav-pills { display: flex; align-items: center; background: #17181c; padding: 5px; border-radius: 99px; gap: 3px; }
+    .nav-pills a { color: #8c92a2; text-decoration: none; padding: 7px 18px; font-size: 13px; font-weight: 500; border-radius: 99px; transition: all 0.2s ease; }
+    .nav-pills a.active, .nav-pills a:hover { color: #111; background: var(--accent-purple); }
+
+    .user-profile { display: flex; align-items: center; gap: 14px; }
+    .user-badge-pill { background: #ece7f8; border: 1px solid #dcd1f5; padding: 6px 14px; border-radius: 99px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .user-badge-pill b { background: #c4b5fd; color: #2b1f5c; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+
+    .btn-logout { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; padding: 6px; }
+
+    .top-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .page-title { font-size: 38px; font-weight: 600; letter-spacing: -1px; }
+
+    .btn-export {
+      background: #fff; border: 1px solid var(--border-color); padding: 10px 22px; border-radius: 99px; font-size: 13.5px; font-weight: 500; color: var(--text-dark); text-decoration: none; display: inline-flex; align-items: center; gap: 8px; transition: background 0.2s;
+    }
+    .btn-export:hover { background: #efe9fc; border-color: var(--accent-purple); }
+
+    .filters-row { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+    .filters-badge { background: #e5def5; border-radius: 99px; padding: 6px 14px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+    .filters-badge span { background: var(--card-dark); color: #fff; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+
+    .filter-select, .filter-input {
+      background: #fff; border: 1px solid var(--border-color); border-radius: 99px; padding: 10px 20px; font-size: 13.5px; color: var(--text-dark); outline: none; transition: border-color 0.2s;
+    }
+    .filter-select:hover, .filter-input:focus { border-color: var(--accent-purple); }
+
+    .filter-search-wrap { position: relative; flex: 1; max-width: 300px; }
+    .filter-search-wrap input { width: 100%; padding-right: 38px; }
+    .filter-search-wrap .icon { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
+
+    .dark-card-journal {
+      background: var(--card-dark); color: #fff; border-radius: 28px; padding: 24px; box-shadow: 0 16px 40px rgba(0,0,0,0.12);
+    }
+
+    .journal-head-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .journal-title { font-size: 22px; font-weight: 500; }
+    .journal-title span { color: #828796; font-size: 18px; margin-left: 6px; }
+
+    .tab-pills-dark { display: flex; background: rgba(255,255,255,0.06); padding: 4px; border-radius: 99px; gap: 4px; }
+    .tab-pills-dark a {
+      color: #9ca1b0; text-decoration: none; padding: 6px 16px; border-radius: 99px; font-size: 13px; font-weight: 500; transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+    }
+    .tab-pills-dark a.active { background: #fff; color: #111; }
+    .tab-pills-dark a small { opacity: 0.6; font-size: 11px; }
+
+    .journal-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    .journal-table th { text-align: left; font-size: 11.5px; color: #7b8192; font-weight: 500; padding: 12px 16px; border-bottom: 1px solid var(--border-dark); text-transform: uppercase; }
+    .journal-table td { padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+    .journal-table tr:hover { background: rgba(255,255,255,0.03); }
+
+    .tag-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 99px; font-size: 11.5px; font-weight: 500;
+    }
+    .tag-payment { background: #c4b5fd; color: #2b1f5c; }
+    .tag-login { background: rgba(255,255,255,0.15); color: #fff; }
+    .tag-error { background: #ff6b5b; color: #fff; }
+    .tag-edit { background: rgba(255,255,255,0.1); color: #c4b5fd; }
+    .tag-notice { background: rgba(255,255,255,0.08); color: #828796; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <a href="/" class="brand"><div class="brand-icon">$</div> PayDay</a>
+
+    <nav class="nav-pills">
+      <a href="/">Платежи</a>
+      <a href="/payments">Регулярные</a>
+      <a href="/users">Пользователи</a>
+      <a href="/journal" class="active">• Журнал</a>
+    </nav>
+
+    <div class="user-profile">
+      <div class="user-badge-pill"><b>АД</b> <span>{{if .User}}{{.User.Login}}{{else}}admin{{end}}</span></div>
+      <form method="post" action="/logout" style="margin:0">
+        <button class="btn-logout" title="Выйти">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+        </button>
+      </form>
+    </div>
+  </header>
+
+  <main>
+    <div class="top-head">
+      <h1 class="page-title">Журнал действий</h1>
+      <a href="/journal/export.csv" class="btn-export">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        Экспорт CSV
+      </a>
+    </div>
+
+    <!-- Фильтры верхнего бара -->
+    <form method="get" action="/journal" class="filters-row">
+      <div class="filters-badge">Фильтры <span>1</span></div>
+
+      <select name="user" class="filter-select" onchange="this.form.submit()">
+        <option value="all">Все пользователи</option>
+        {{range .Users}}
+        <option value="{{.ID}}" {{if eq $.UserFilter (printf "%d" .ID)}}selected{{end}}>{{.Login}}</option>
+        {{end}}
+      </select>
+
+      <select name="event" class="filter-select" onchange="this.form.submit()">
+        <option value="all">Все события</option>
+        <option value="auth">Авторизация</option>
+        <option value="payments">Платежи</option>
+      </select>
+
+      <select name="range" class="filter-select" onchange="this.form.submit()">
+        <option value="30d">Последние 30 дней</option>
+        <option value="7d">Последние 7 дней</option>
+        <option value="all">За всё время</option>
+      </select>
+
+      <div class="filter-search-wrap">
+        <input type="text" name="q" value="{{.SearchQuery}}" placeholder="Поиск по действию" class="filter-input">
+        <span class="icon">🔍</span>
+      </div>
+    </form>
+
+    <div class="dark-card-journal">
+      <div class="journal-head-bar">
+        <div class="journal-title">События <span>· {{.TotalCount}}</span></div>
+
+        <div class="tab-pills-dark">
+          <a href="/journal?tab=all&q={{.SearchQuery}}" class="{{if eq .Tab "all"}}active{{end}}">Все</a>
+          <a href="/journal?tab=auth&q={{.SearchQuery}}" class="{{if eq .Tab "auth"}}active{{end}}">Авторизация <small>{{.AuthCount}}</small></a>
+          <a href="/journal?tab=actions&q={{.SearchQuery}}" class="{{if eq .Tab "actions"}}active{{end}}">Действия <small>{{.ActionCount}}</small></a>
+        </div>
+      </div>
+
+      <table class="journal-table">
+        <thead>
+          <tr>
+            <th>Время</th>
+            <th>Пользователь</th>
+            <th>Тип</th>
+            <th>Действие</th>
+            <th style="text-align:right;">IP / источник</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Logs}}
+          <tr>
+            <td style="color:#828796;">{{.Time}}</td>
+            <td style="font-weight:600;">{{.User}}</td>
+            <td><span class="tag-badge tag-{{.Type}}">{{.TypeLabel}}</span></td>
+            <td>{{.Action}}</td>
+            <td style="text-align:right; color:#828796; font-family:monospace;">{{.IPSource}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+</body>
+</html>
+{{end}}

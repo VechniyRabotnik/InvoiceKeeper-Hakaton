@@ -1,157 +1,657 @@
 {{define "dashboard"}}
 <!doctype html>
 <html lang="ru">
-<head>{{template "head" .}}</head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PayDay · Платежи</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-page: #f4f1f8;
+      --card-dark: #191a1e;
+      --card-light: #ffffff;
+      --accent-purple: #c4b5fd;
+      --accent-purple-hover: #b4a2f5;
+      --text-dark: #111215;
+      --text-muted: #828796;
+      --text-hero-muted: #9ca1b0;
+      --border-color: #e5e0ef;
+      --border-dark: #292a30;
+      --danger: #ff6b5b;
+      --success: #3fb950;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-dark);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 36px 48px;
+      -webkit-font-smoothing: antialiased;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 18px;
+      color: var(--text-dark);
+      text-decoration: none;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      background: #17181c;
+      color: #fff;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .nav-pills {
+      display: flex;
+      align-items: center;
+      background: #17181c;
+      padding: 5px;
+      border-radius: 99px;
+      gap: 3px;
+    }
+
+    .nav-pills a {
+      color: #8c92a2;
+      text-decoration: none;
+      padding: 7px 18px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 99px;
+      transition: all 0.2s ease;
+    }
+
+    .nav-pills a.active, .nav-pills a:hover {
+      color: #111;
+      background: var(--accent-purple);
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .user-badge-pill {
+      background: #ece7f8;
+      border: 1px solid #dcd1f5;
+      padding: 6px 14px;
+      border-radius: 99px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .user-badge-pill b {
+      background: #c4b5fd;
+      color: #2b1f5c;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+    }
+
+    .btn-logout {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      padding: 6px;
+      transition: color 0.15s;
+    }
+    .btn-logout:hover { color: var(--danger); }
+
+    .page-title {
+      font-size: 38px;
+      font-weight: 600;
+      letter-spacing: -1px;
+      margin-bottom: 24px;
+    }
+
+    .top-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 340px;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .stat-box {
+      background: var(--card-light);
+      border-radius: 22px;
+      padding: 22px;
+      border: 1px solid rgba(228, 220, 242, 0.8);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.015);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .stat-box:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+    }
+
+    .stat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .stat-amount {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.5px;
+    }
+
+    .stat-subtext {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    .progress-bar-wrap {
+      height: 6px;
+      background: #f0ecf8;
+      border-radius: 99px;
+      overflow: hidden;
+      display: flex;
+      margin-bottom: 16px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent-purple);
+      transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .stat-details-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12.5px;
+      color: var(--text-muted);
+      border-top: 1px solid #f2eff8;
+      padding-top: 12px;
+    }
+    .stat-details-row div { display: flex; justify-content: space-between; }
+
+    .upcoming-box {
+      background: var(--card-light);
+      border-radius: 22px;
+      padding: 20px;
+      border: 1px solid rgba(228, 220, 242, 0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .upcoming-items {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .up-card {
+      background: #f7f4fc;
+      border-radius: 14px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 80px;
+      transition: background 0.2s;
+    }
+    .up-card:hover { background: #efe9fc; }
+    .up-card.highlight { background: #dcd0fa; color: #111; }
+    .up-card .date { font-weight: 600; font-size: 13px; }
+    .up-card .tag { font-size: 11px; color: var(--text-muted); }
+    .up-card.highlight .tag { color: rgba(0,0,0,0.6); }
+
+    .filters-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .filter-pill {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 99px;
+      padding: 9px 18px;
+      font-size: 13.5px;
+      color: var(--text-dark);
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .filter-pill:hover { border-color: var(--accent-purple); }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 20px;
+      align-items: start;
+    }
+    .workspace.full { grid-template-columns: 1fr; }
+
+    .dark-card {
+      background: var(--card-dark);
+      color: #ffffff;
+      border-radius: 26px;
+      padding: 24px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.12);
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .table-subhead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .status-tabs {
+      display: flex;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 4px;
+      border-radius: 99px;
+      gap: 4px;
+    }
+
+    .status-tabs a {
+      color: #9ca1b0;
+      text-decoration: none;
+      padding: 6px 14px;
+      border-radius: 99px;
+      font-size: 12.5px;
+      font-weight: 500;
+      transition: background 0.2s, color 0.2s;
+    }
+    .status-tabs a.active {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    .payday-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .payday-table th {
+      text-align: left;
+      font-size: 11.5px;
+      color: #7b8192;
+      font-weight: 500;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .payday-table td {
+      padding: 14px;
+      border-bottom: 1px solid var(--border-dark);
+      vertical-align: middle;
+    }
+
+    .payday-table tr {
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .payday-table tr:hover { background: rgba(255,255,255,0.04); }
+    .payday-table tr.selected { background: rgba(196, 181, 253, 0.1); }
+
+    .badge-status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .b-paid { background: rgba(63, 185, 80, 0.18); color: #56d364; }
+    .b-due { background: rgba(210, 153, 34, 0.18); color: #e3b341; }
+    .b-overdue { background: rgba(248, 81, 73, 0.18); color: #ff7b72; }
+    .b-planned { background: rgba(139, 148, 158, 0.18); color: #adbac7; }
+
+    .detail-sidebar {
+      background: var(--card-dark);
+      border-radius: 26px;
+      padding: 24px;
+      color: #fff;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .sidebar-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .sidebar-top h3 {
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: -0.5px;
+      margin-top: 6px;
+    }
+
+    .info-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .info-card-gray {
+      background: rgba(255,255,255,0.06);
+      border-radius: 16px;
+      padding: 14px;
+    }
+    .info-card-gray .lbl { font-size: 11px; color: #828796; text-transform: uppercase; margin-bottom: 6px; }
+    .info-card-gray .val { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    .history-periods {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .hist-item {
+      background: rgba(255,255,255,0.05);
+      border-radius: 10px;
+      padding: 8px 6px;
+      text-align: center;
+      font-size: 11px;
+    }
+    .hist-item.active { background: rgba(196, 181, 253, 0.15); border: 1px solid var(--accent-purple); }
+
+    .btn-action-main {
+      width: 100%;
+      height: 46px;
+      background: var(--accent-purple);
+      color: #111;
+      border: none;
+      border-radius: 99px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn-action-main:hover { background: var(--accent-purple-hover); }
+    .btn-action-main:active { transform: scale(0.98); }
+
+    .date-input-dark {
+      width: 100%;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .date-input-dark:focus { border-color: var(--accent-purple); }
+  </style>
+</head>
 <body>
-{{template "header" .}}
-<main>
-<h1>Регулярные платежи <small>на {{.Today}}</small></h1>
-{{template "flash" .}}
 
-<div class="grid" style="margin-bottom:20px">
-  {{range .Summary.ByCurrency}}
-  <div class="stat">
-    <div class="k">{{.Currency}} · {{.Count}} периодов</div>
-    <div class="v">{{printf "%.2f" .Total}} <small>{{.Currency}}</small></div>
-    <div class="muted" style="font-size:13px;margin-top:8px">
-      оплачено {{printf "%.2f" .Paid}} · к оплате {{printf "%.2f" .Outstanding}}
-    </div>
-    {{if gt .Overdue 0.0}}
-    <div class="late" style="margin-top:4px">просрочено {{printf "%.2f" .Overdue}}</div>
-    {{end}}
-  </div>
-  {{end}}
-  <div class="stat">
-    <div class="k">Статусы · {{.Summary.Status.Total}} периодов</div>
-    <div class="v badges">
-      <span class="badge b-paid">оплачено {{.Summary.Status.Paid}}</span>
-      <span class="badge b-due">срок сегодня {{.Summary.Status.Due}}</span>
-      <span class="badge b-overdue">просрочено {{.Summary.Status.Overdue}}</span>
-      <span class="badge b-planned">ожидает {{.Summary.Status.Planned}}</span>
-    </div>
-  </div>
-</div>
+  <header>
+    <a href="/" class="brand">
+      <div class="brand-icon">$</div>
+      PayDay
+    </a>
 
-<div class="card">
-  <div class="card-head">
-    <h2>Периоды оплат</h2>
-    <div class="spacer"></div>
-    
-    <!-- Форма фильтров, периода и сортировки -->
-    <form method="get" action="/" class="filters inline">
-      <label for="range">Период</label>
-      <select id="range" name="range" onchange="this.form.submit()">
-        <option value="all" {{if eq .Range "all"}}selected{{end}}>Все будущие</option>
-        <option value="1m" {{if eq .Range "1m"}}selected{{end}}>Ближайший 1 месяц</option>
-        <option value="3m" {{if eq .Range "3m"}}selected{{end}}>Ближайшие 3 месяца</option>
-        <option value="6m" {{if eq .Range "6m"}}selected{{end}}>Ближайшие 6 месяцев</option>
-      </select>
-
-      <label for="sort">Сортировка</label>
-      <select id="sort" name="sort" onchange="this.form.submit()">
-        <option value="date_asc" {{if eq .Sort "date_asc"}}selected{{end}}>По сроку (сначала близкие)</option>
-        <option value="date_desc" {{if eq .Sort "date_desc"}}selected{{end}}>По сроку (сначала далёкие)</option>
-        <option value="amount_desc" {{if eq .Sort "amount_desc"}}selected{{end}}>По сумме (убывание)</option>
-      </select>
-
-      <label for="owner">Ответственный</label>
-      <select id="owner" name="owner" onchange="this.form.submit()">
-        <option value="all" {{if eq .Owner "all"}}selected{{end}}>Все платежи</option>
-        <option value="none" {{if eq .Owner "none"}}selected{{end}}>Без ответственного</option>
-        {{$owner := .Owner}}
-        {{range .Users}}
-        <option value="{{.ID}}" {{if eq $owner (printf "%d" .ID)}}selected{{end}}>{{.Login}}</option>
-        {{end}}
-      </select>
-      <noscript><button class="mini ghost">Применить</button></noscript>
-    </form>
-  </div>
-
-  {{if .Rows}}
-  <table>
-    <thead>
-      <tr>
-        <th>Платёж</th>
-        <th class="num">Сумма</th>
-        <th>Ответственный</th>
-        <th>Срок</th>
-        <th>Статус</th>
-        <th>Оплачено</th>
-        <th>Просрочка</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {{range .Rows}}
-      <tr>
-        <td>{{.PaymentName}}</td>
-        <td class="num">{{.Amount}}</td>
-        <td>
-          {{if $.IsAdmin}}
-          <div class="inline">
-            <form method="post" action="/occurrences/{{.ID}}/owner">
-              <select class="owner-select" name="user_id">
-                <option value="0" {{if eq .UserID 0}}selected{{end}}>не назначен</option>
-                {{$assigned := .UserID}}
-                {{range $.Users}}
-                <option value="{{.ID}}" {{if eq $assigned .ID}}selected{{end}}>{{.Login}}</option>
-                {{end}}
-              </select>
-              <input type="hidden" name="owner" value="{{$.OwnerQuery}}">
-              <button class="mini ghost">Назначить</button>
-            </form>
-          </div>
-          {{else}}
-            {{if .UserName}}<span class="badge b-owner">{{.UserName}}</span>{{else}}<span class="muted">—</span>{{end}}
-          {{end}}
-        </td>
-        <td>
-          {{if $.IsAdmin}}
-          <form method="post" action="/occurrences/{{.ID}}/due" class="inline">
-            <input type="date" name="due_date" value="{{.DueDate}}">
-            <input type="hidden" name="owner" value="{{$.OwnerQuery}}">
-            <button class="mini ghost" title="Перенести срок этого периода">Срок</button>
-          </form>
-          {{else}}{{.DueDate}}{{end}}
-        </td>
-        <td><span class="badge b-{{.Status}}">{{.StatusLabel}}</span></td>
-        <td>{{if .PaidAt}}{{.PaidAt}}{{else}}<span class="muted">—</span>{{end}}</td>
-        <td>{{if .Overdue}}<span class="late">{{.Overdue}}</span>{{else}}<span class="onTime">—</span>{{end}}</td>
-        <td>
-          <div class="stacked">
-            <form method="post" action="/occurrences/{{.ID}}/paid">
-              <div class="inline">
-                <input type="date" name="paid_at" value="{{if .PaidAt}}{{.PaidAt}}{{else}}{{$.Today}}{{end}}">
-                <input type="hidden" name="owner" value="{{$.OwnerQuery}}">
-                <button class="mini" title="Отметить оплату указанной датой">Оплачено</button>
-              </div>
-            </form>
-            {{if .IsPaid}}
-            <form method="post" action="/occurrences/{{.ID}}/paid">
-              <input type="hidden" name="paid_at" value="">
-              <input type="hidden" name="owner" value="{{$.OwnerQuery}}">
-              <button class="ghost mini" title="Снять отметку об оплате">Снять</button>
-            </form>
-            {{end}}
-          </div>
-        </td>
-      </tr>
+    <nav class="nav-pills">
+      {{if .User.IsAdmin}}
+        <a href="/" class="active">Платежи</a>
+        <a href="/payments">Регулярные</a>
+        <a href="/users">Пользователи</a>
+        <a href="/journal">Журнал</a>
+      {{else}}
+        <a href="/">Платежи</a>
+        <a href="/calendar">Календарь</a>
+        <a href="/budget">Бюджет</a>
       {{end}}
-    </tbody>
-  </table>
-  {{else}}
-  <div class="empty">Платежей по этому фильтру нет</div>
-  {{end}}
-</div>
+    </nav>
 
-{{if .IsAdmin}}
-<p class="hint">
-  Ответственный закрепляется за шаблоном на вкладке <a href="/payments">Шаблоны</a> —
-  все его периоды наследуют привязку. Здесь назначить можно сразу для периода:
-  изменение применяется к шаблону платежа.
-</p>
-{{end}}
-</main>
+    <div class="user-profile">
+      <div class="user-badge-pill">
+        <b>АД</b>
+        <span>{{if .User}}{{.User.Login}}{{else}}admin{{end}}</span>
+      </div>
+      <form method="post" action="/logout" style="margin:0">
+        <button class="btn-logout" title="Выйти">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+        </button>
+      </form>
+    </div>
+  </header>
+
+  <main>
+    <h1 class="page-title">Платежи</h1>
+
+    <div class="top-stats-grid">
+      {{range .Summary.ByCurrency}}
+      <div class="stat-box">
+        <div class="stat-header">
+          <span>{{.Currency}} · {{.Count}} периодов</span>
+        </div>
+        <div class="stat-amount">{{printf "%.2f" .Total}} <small style="font-size:16px; font-weight:400">{{.Currency}}</small></div>
+        <div class="stat-subtext">Всего к оплате</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" style="width: {{if gt .Total 0.0}}{{printf "%.0f" (div .Paid .Total)}}{{else}}0{{end}}%;"></div>
+        </div>
+        <div class="stat-details-row">
+          <div><span>Оплачено</span> <span style="color:var(--success)">{{printf "%.2f" .Paid}}</span></div>
+          <div><span>Не оплачено</span> <span>{{printf "%.2f" .Outstanding}}</span></div>
+          {{if gt .Overdue 0.0}}
+          <div><span>Просрочено</span> <span style="color:var(--danger)">{{printf "%.2f" .Overdue}}</span></div>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
+
+      <div class="upcoming-box">
+        <div class="stat-header">
+          <span>Ближайшие сроки</span>
+          <span>➔</span>
+        </div>
+        <div class="upcoming-items">
+          <div class="up-card highlight">
+            <div class="date">Завтра</div>
+            <div class="tag">AWS · $120</div>
+          </div>
+          <div class="up-card">
+            <div class="date">27 окт</div>
+            <div class="tag">Figma · €45</div>
+          </div>
+          <div class="up-card">
+            <div class="date">30 окт</div>
+            <div class="tag">Slack · $20</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Фильтры выпадающие -->
+    <div class="filters-bar">
+      <form method="get" action="/" style="display:flex; gap:10px; width:100%;">
+        <input type="hidden" name="status" value="{{.Status}}">
+        <select name="range" class="filter-pill" onchange="this.form.submit()">
+          <option value="all" {{if eq .Range "all"}}selected{{end}}>Все будущие периоды</option>
+          <option value="1m" {{if eq .Range "1m"}}selected{{end}}>Ближайший 1 месяц</option>
+          <option value="3m" {{if eq .Range "3m"}}selected{{end}}>Ближайшие 3 месяца</option>
+        </select>
+
+        <select name="sort" class="filter-pill" onchange="this.form.submit()">
+          <option value="date_asc" {{if eq .Sort "date_asc"}}selected{{end}}>По сроку (сначала близкие)</option>
+          <option value="date_desc" {{if eq .Sort "date_desc"}}selected{{end}}>По сроку (сначала далекие)</option>
+        </select>
+
+        <select name="owner" class="filter-pill" onchange="this.form.submit()">
+          <option value="all" {{if eq .Owner "all"}}selected{{end}}>Все ответственные</option>
+          <option value="none" {{if eq .Owner "none"}}selected{{end}}>Без ответственного</option>
+          {{$owner := .Owner}}
+          {{range .Users}}
+          <option value="{{.ID}}" {{if eq $owner (printf "%d" .ID)}}selected{{end}}>{{.Login}}</option>
+          {{end}}
+        </select>
+      </form>
+    </div>
+
+    <div class="workspace {{if not .SelectedOccurrence}}full{{end}}">
+      
+      <div class="dark-card">
+        <div class="table-subhead">
+          <h2>Платежи · октябрь 2026</h2>
+          <!-- Рабочие вкладки статусов -->
+          <div class="status-tabs">
+            <a href="/?status=all&owner={{.Owner}}&sort={{.Sort}}&range={{.Range}}{{if .SelectedID}}&select={{.SelectedID}}{{end}}" class="{{if eq .Status "all"}}active{{end}}">Все</a>
+            <a href="/?status=unpaid&owner={{.Owner}}&sort={{.Sort}}&range={{.Range}}{{if .SelectedID}}&select={{.SelectedID}}{{end}}" class="{{if eq .Status "unpaid"}}active{{end}}">Не оплачено</a>
+            <a href="/?status=paid&owner={{.Owner}}&sort={{.Sort}}&range={{.Range}}{{if .SelectedID}}&select={{.SelectedID}}{{end}}" class="{{if eq .Status "paid"}}active{{end}}">Оплачено</a>
+            <a href="/?status=overdue&owner={{.Owner}}&sort={{.Sort}}&range={{.Range}}{{if .SelectedID}}&select={{.SelectedID}}{{end}}" class="{{if eq .Status "overdue"}}active{{end}}">Просрочено</a>
+          </div>
+        </div>
+
+        {{if .Rows}}
+        <table class="payday-table">
+          <thead>
+            <tr>
+              <th>Платёж</th>
+              <th>Статус</th>
+              <th>Оплачено</th>
+              <th>Сумма</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Rows}}
+            <tr onclick="location.href='/?select={{.ID}}&status={{$.Status}}&owner={{$.Owner}}&sort={{$.Sort}}&range={{$.Range}}'" 
+                class="{{if eq $.SelectedID .ID}}selected{{end}}">
+              <td>
+                <div style="font-weight: 500; font-size:15px; margin-bottom:2px;">{{.PaymentName}}</div>
+                <div style="font-size: 12px; color: #828796;">Срок {{.DueDate}}</div>
+              </td>
+              <td><span class="badge-status b-{{.Status}}">{{.StatusLabel}}</span></td>
+              <td style="color: #828796;">{{if .PaidAt}}{{.PaidAt}}{{else}}—{{end}}</td>
+              <td style="font-weight: 600; font-variant-numeric: tabular-nums;">{{.Amount}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+        {{else}}
+        <div style="text-align: center; padding: 50px; color: #828796;">
+          <h3>Платежей по данному фильтру не найдено</h3>
+        </div>
+        {{end}}
+      </div>
+
+      {{if .SelectedOccurrence}}
+      <div class="detail-sidebar">
+        <div class="sidebar-top">
+          <div>
+            <span style="font-size: 11px; color: #828796; text-transform: uppercase;">Период · октябрь 2026</span>
+            <h3>{{.SelectedOccurrence.PaymentName}}</h3>
+          </div>
+          <a href="/?status={{.Status}}&owner={{.Owner}}&sort={{.Sort}}&range={{.Range}}" style="color:#828796; text-decoration:none; font-size:18px;">✕</a>
+        </div>
+
+        <div>
+          <span class="badge-status b-{{.SelectedOccurrence.Status}}">{{.SelectedOccurrence.StatusLabel}}</span>
+        </div>
+
+        <div class="info-grid-2">
+          <div class="info-card-gray">
+            <div class="lbl">Сумма</div>
+            <div class="val">{{.SelectedOccurrence.Amount}}</div>
+          </div>
+          <div class="info-card-gray">
+            <div class="lbl">Срок оплаты</div>
+            <div class="val" style="font-size: 15px; margin-top:2px;">{{.SelectedOccurrence.DueDate}}</div>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 11px; color: #828796; text-transform: uppercase; margin-bottom: 8px;">История периодов</div>
+          <div class="history-periods">
+            <div class="hist-item">Авг<br><b>20 авг</b></div>
+            <div class="hist-item">Сен<br><b>19 сен</b></div>
+            <div class="hist-item active">Окт<br><b>ожидает</b></div>
+            <div class="hist-item">Ноя<br><b>ожидает</b></div>
+          </div>
+        </div>
+
+        <div style="font-size: 12px; color: #828796; display: flex; align-items: center; gap: 6px;">
+          <span>✈️ Напоминание отправлено в Telegram</span>
+        </div>
+
+        <form method="post" action="/occurrences/{{.SelectedOccurrence.ID}}/paid">
+          <div style="margin-bottom: 12px;">
+            <label style="font-size: 11px; color: #828796; text-transform: uppercase; display: block; margin-bottom: 6px;">Дата оплаты</label>
+            <input type="date" name="paid_at" value="{{if .SelectedOccurrence.PaidAt}}{{.SelectedOccurrence.PaidAt}}{{else}}{{$.Today}}{{end}}" class="date-input-dark">
+          </div>
+
+          {{if .SelectedOccurrence.IsPaid}}
+          <input type="hidden" name="paid_at" value="">
+          <button type="submit" class="btn-action-main" style="background: #444; color: #fff;">Снять отметку</button>
+          {{else}}
+          <button type="submit" class="btn-action-main">Отметить оплаченным</button>
+          {{end}}
+        </form>
+      </div>
+      {{end}}
+
+    </div>
+  </main>
+
 </body>
 </html>
 {{end}}

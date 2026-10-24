@@ -1,97 +1,301 @@
 {{define "users"}}
 <!doctype html>
 <html lang="ru">
-<head>{{template "head" .}}</head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PayDay · Пользователи</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-page: #f4f1f8;
+      --card-dark: #191a1e;
+      --card-light: #ffffff;
+      --accent-purple: #c4b5fd;
+      --accent-purple-hover: #b4a2f5;
+      --text-dark: #111215;
+      --text-muted: #828796;
+      --border-color: #e5e0ef;
+      --border-dark: #292a30;
+      --danger: #ff6b5b;
+      --success: #3fb950;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-dark);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 36px 48px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 18px;
+      color: var(--text-dark);
+      text-decoration: none;
+    }
+
+    .brand-icon {
+      width: 32px; height: 32px; background: #17181c; color: #fff; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold;
+    }
+
+    .nav-pills {
+      display: flex; align-items: center; background: #17181c; padding: 5px; border-radius: 99px; gap: 3px;
+    }
+    .nav-pills a {
+      color: #8c92a2; text-decoration: none; padding: 7px 18px; font-size: 13px; font-weight: 500; border-radius: 99px; transition: all 0.2s;
+    }
+    .nav-pills a.active, .nav-pills a:hover { color: #111; background: var(--accent-purple); }
+
+    .user-profile { display: flex; align-items: center; gap: 14px; }
+    .user-badge-pill {
+      background: #ece7f8; border: 1px solid #dcd1f5; padding: 6px 14px; border-radius: 99px; display: flex; align-items: center; gap: 8px; font-size: 13px;
+    }
+    .user-badge-pill b {
+      background: #c4b5fd; color: #2b1f5c; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px;
+    }
+    .btn-logout { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; padding: 6px; }
+    .btn-logout:hover { color: var(--danger); }
+
+    .page-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .page-title { font-size: 38px; font-weight: 600; letter-spacing: -1px; }
+
+    .btn-primary-pill {
+      background: #ffffff; color: #111; border: 1px solid var(--border-color); padding: 10px 20px; border-radius: 99px;
+      font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    }
+    .btn-primary-pill:hover { background: #faf8fc; }
+
+    .top-info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .info-banner {
+      background: var(--card-light);
+      border-radius: 22px;
+      padding: 20px 24px;
+      border: 1px solid rgba(228, 220, 242, 0.8);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.015);
+      font-size: 13.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .info-banner strong { color: var(--text-dark); display: block; margin-bottom: 6px; font-size: 15px; }
+
+    .dark-card { background: var(--card-dark); color: #ffffff; border-radius: 26px; padding: 24px; box-shadow: 0 16px 40px rgba(0,0,0,0.12); }
+    .dark-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .dark-card-title { font-size: 18px; font-weight: 500; }
+
+    .payday-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .payday-table th { text-align: left; font-size: 11.5px; color: #7b8192; font-weight: 500; padding: 10px 14px; border-bottom: 1px solid var(--border-dark); text-transform: uppercase; }
+    .payday-table td { padding: 16px 14px; border-bottom: 1px solid var(--border-dark); vertical-align: middle; }
+
+    .user-avatar-badge {
+      width: 36px; height: 36px; background: rgba(196, 181, 253, 0.15); color: #c4b5fd; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px;
+    }
+
+    .badge-role {
+      display: inline-block; padding: 4px 12px; border-radius: 99px; font-size: 11.5px; font-weight: 500; margin-top: 4px;
+    }
+    .b-admin { background: rgba(63, 185, 80, 0.2); color: #56d364; }
+    .b-user { background: rgba(139, 148, 158, 0.2); color: #adbac7; }
+
+    .btn-action-icon {
+      background: none; border: none; color: #828796; cursor: pointer; padding: 6px; border-radius: 8px;
+    }
+    .btn-action-icon:hover { color: #fff; background: rgba(255,255,255,0.08); }
+    .btn-action-icon.danger:hover { color: var(--danger); background: rgba(255,107,91,0.1); }
+
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center;
+    }
+    .modal-container {
+      background: #ffffff; color: #111215; border-radius: 24px; padding: 28px; width: 440px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-header h3 { font-size: 18px; font-weight: 600; }
+    .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: #828796; }
+    
+    .field { margin-bottom: 16px; }
+    .field label { font-size: 12px; color: #828796; display: block; margin-bottom: 6px; text-transform: uppercase; font-weight: 500; }
+    input, select { background: #f7f4fc; border: 1px solid var(--border-color); color: var(--text-dark); border-radius: 12px; padding: 12px 14px; font-size: 14px; width: 100%; outline: none; }
+    input:focus { border-color: var(--accent-purple); }
+
+    .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+  </style>
+</head>
 <body>
-{{template "header" .}}
-<main>
-<h1>Пользователи</h1>
-{{template "flash" .}}
 
-<div class="card">
-  <h2>Новый пользователь</h2>
-  <form method="post" action="/users" class="row">
-    <div class="field wide">
-      <label for="login">Логин</label>
-      <input id="login" name="login" placeholder="ivan" required minlength="3" autocomplete="off">
+  <header>
+    <a href="/" class="brand">
+      <div class="brand-icon">$</div>
+      PayDay
+    </a>
+
+    <nav class="nav-pills">
+      <a href="/">Платежи</a>
+      <a href="/payments">Регулярные</a>
+      <a href="/users" class="active">Пользователи</a>
+      <a href="/journal">Журнал</a>
+    </nav>
+
+    <div class="user-profile">
+      <div class="user-badge-pill">
+        <b>АД</b>
+        <span>{{if .User}}{{.User.Login}}{{else}}admin{{end}}</span>
+      </div>
+      <form method="post" action="/logout" style="margin:0">
+        <button class="btn-logout" title="Выйти"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
+      </form>
     </div>
-    <button>Создать</button>
-  </form>
-  <p class="hint">
-    Создаются только обычные пользователи без пароля для веб-панели. 
-    После того как пользователь нажмет кнопку <code>/start</code> в Telegram-боте, администратор сможет привязать его чат.
-  </p>
-</div>
+  </header>
 
-<div class="card">
-  <h2>Учётные записи</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Логин / Роль</th>
-        <th>Telegram Chat ID</th>
-        <th class="num">Платежей</th>
-        <th>Создан</th>
-        <th>Изменение данных</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {{range .Users}}
-      <tr>
-        <td class="muted">{{.ID}}</td>
-        <td>
-          <strong>{{.Login}}</strong><br>
-          {{if .IsAdmin}}
-            <span class="badge b-paid">администратор</span>
-          {{else}}
-            <span class="badge b-planned">пользователь</span>
+  <main>
+    <div class="page-header-row">
+      <h1 class="page-title">Пользователи</h1>
+      <button class="btn-primary-pill" onclick="document.getElementById('modal-create').style.display='flex'">
+        <span>+ Новый пользователь</span>
+      </button>
+    </div>
+
+    {{template "flash" .}}
+
+    <div class="top-info-grid">
+      <div class="info-banner">
+        <strong>Доступ в веб-панель</strong>
+        Администратор может создавать пользователей, выдавать им пароли для входа в индивидуальную панель, а также привязывать Telegram Chat ID.
+      </div>
+      <div class="info-banner">
+        <strong>Управление ролями</strong>
+        Логин администратора задается в файле <code>.env</code> и не подлежит изменению через интерфейс панели.
+      </div>
+    </div>
+
+    <!-- Модальное окно создания пользователя с паролем -->
+    <div id="modal-create" class="modal-overlay">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h3>Новый пользователь</h3>
+          <button class="modal-close" onclick="document.getElementById('modal-create').style.display='none'">✕</button>
+        </div>
+        <form method="post" action="/users">
+          <div class="field">
+            <label>Логин</label>
+            <input name="login" placeholder="ivan_user" required minlength="3" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Пароль для веб-панели</label>
+            <input type="password" name="password" placeholder="••••••••" required minlength="4">
+          </div>
+          <div style="background: #f7f4fc; padding: 12px; border-radius: 12px; font-size: 12.5px; color: #666; margin-bottom: 16px;">
+            🔑 Пользователь сможет использовать этот логин и пароль для входа в систему.
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-primary-pill" style="background:#eee;" onclick="document.getElementById('modal-create').style.display='none'">Отмена</button>
+            <button type="submit" class="btn-primary-pill" style="background:var(--accent-purple);">Создать пользователя</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Темная карточка списка учетных записей -->
+    <div class="dark-card">
+      <div class="dark-card-header">
+        <div class="dark-card-title">Учётные записи</div>
+      </div>
+
+      {{if .Users}}
+      <table class="payday-table">
+        <thead>
+          <tr>
+            <th>Пользователь</th>
+            <th>Telegram Chat ID</th>
+            <th class="num">Платежей</th>
+            <th>Создан</th>
+            <th>Изменение данных и пароля</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Users}}
+          <tr>
+            <td>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="user-avatar-badge">{{slice .Login 0 1}}</div>
+                <div>
+                  <div style="font-weight: 600; font-size: 15px;">{{.Login}}</div>
+                  {{if .IsAdmin}}
+                    <span class="badge-role b-admin">администратор</span>
+                  {{else}}
+                    <span class="badge-role b-user">пользователь</span>
+                  {{end}}
+                </div>
+              </div>
+            </td>
+            <td>
+              {{if .IsAdmin}}
+                <span style="color:#666">—</span>
+              {{else}}
+                <form method="post" action="/users/{{.ID}}/chat" style="display:inline-flex; gap:6px;">
+                  <input name="tg_chat_id" value="{{.TGChatID}}" placeholder="Chat ID" style="width:130px; padding:6px 10px; font-size:13px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; border-radius:8px;">
+                  <button class="btn-action-icon" title="Сохранить чат" style="background:rgba(255,255,255,0.08); padding:6px 10px; font-size:12px; color:#c4b5fd;">Привязать</button>
+                </form>
+              {{end}}
+            </td>
+            <td class="num" style="font-weight:600;">
+              {{if .IsAdmin}}<span style="color:#666">—</span>
+              {{else if gt .Payments 0}}<a href="/?owner={{.ID}}" style="color:#c4b5fd; text-decoration:none;">{{.Payments}}</a>
+              {{else}}<span style="color:#666">0</span>{{end}}
+            </td>
+            <td style="color:#828796; font-size:13px;">{{.CreatedAt.Format "02.01.2006"}}</td>
+            <td>
+              <div style="display:inline-flex; gap:6px; align-items:center;">
+                {{if not .IsAdmin}}
+                <form method="post" action="/users/{{.ID}}" style="display:inline-flex; gap:6px; align-items:center;">
+                  <input name="login" value="{{.Login}}" minlength="3" required style="width:105px; padding:6px 10px; font-size:13px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; border-radius:8px;" title="Логин">
+                  <input type="password" name="password" placeholder="Новый пароль" style="width:115px; padding:6px 10px; font-size:13px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; border-radius:8px;" title="Оставьте пустым, если не нужно менять">
+                  <button class="btn-action-icon" title="Сохранить" style="background:rgba(255,255,255,0.08); padding:6px 10px; font-size:12px; color:#fff;">ОК</button>
+                </form>
+                <form method="post" action="/users/{{.ID}}/delete" style="margin:0" onsubmit="return confirm('Удалить пользователя {{.Login}}?')">
+                  <button class="btn-action-icon danger" title="Удалить">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  </button>
+                </form>
+                {{else}}
+                <span style="color:#828796; font-size:12.5px;">управляется .env</span>
+                {{end}}
+              </div>
+            </td>
+          </tr>
           {{end}}
-        </td>
-        <td>
-          {{if .IsAdmin}}
-            <span class="muted">—</span>
-          {{else}}
-            <form method="post" action="/users/{{.ID}}/chat" class="inline">
-              <input name="tg_chat_id" value="{{.TGChatID}}" placeholder="123456789" style="width:140px">
-              <button class="mini ghost">Привязать</button>
-            </form>
-          {{end}}
-        </td>
-        <td class="num">
-          {{if .IsAdmin}}<span class="muted">—</span>
-          {{else if gt .Payments 0}}<a href="/?owner={{.ID}}">{{.Payments}}</a>
-          {{else}}<span class="muted">0</span>{{end}}
-        </td>
-        <td class="muted">{{.CreatedAt.Format "02.01.2006"}}</td>
-        <td>
-          {{if .IsAdmin}}
-            <span class="muted" style="font-size:13px">управляется .env</span>
-          {{else}}
-            <form method="post" action="/users/{{.ID}}" class="inline">
-              <input name="login" value="{{.Login}}" minlength="3" required style="width:160px">
-              <button class="mini">Изменить</button>
-            </form>
-          {{end}}
-        </td>
-        <td>
-          {{if not .IsAdmin}}
-          <form method="post" action="/users/{{.ID}}/delete"
-                onsubmit="return confirm('Удалить пользователя {{.Login}}?')">
-            <button class="ghost mini">Удалить</button>
-          </form>
-          {{end}}
-        </td>
-      </tr>
+        </tbody>
+      </table>
+      {{else}}
+      <div style="text-align: center; padding: 60px; color: #828796;">
+        <h3>Пользователей нет</h3>
+      </div>
       {{end}}
-    </tbody>
-  </table>
-  <p class="hint">
-    Логин администратора задается в <code>.env</code> и через панель не изменяется. Пароли для обычных пользователей не требуются, так как у них нет доступа к веб-интерфейсу.
-  </p>
-</div>
-</main>
+    </div>
+  </main>
+
 </body>
 </html>
 {{end}}

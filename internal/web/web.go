@@ -64,6 +64,10 @@ func (h *Handler) Register(r fiber.Router) {
 
 	// Дашборд: периоды, итоги и отметки об оплате.
 	r.Get("/", h.requireAuth, h.Dashboard)
+	r.Get("/calendar", h.requireAuth, h.CalendarPage)
+	r.Get("/budget", h.requireAuth, h.BudgetPage)
+	r.Get("/journal", h.requireAuth, h.requireAdmin, h.JournalPage)
+	r.Get("/journal/export.csv", h.requireAuth, h.requireAdmin, h.ExportJournalCSV)
 	r.Post("/occurrences/:id/paid", h.requireAuth, h.MarkPaid)
 	r.Post("/occurrences/:id/due", h.requireAuth, h.requireAdmin, h.SetOccurrenceDue)
 	r.Post("/occurrences/:id/owner", h.requireAuth, h.requireAdmin, h.AssignOccurrenceOwner)
@@ -129,6 +133,105 @@ func (h *Handler) requireAuth(c *fiber.Ctx) error {
 	}
 	c.Locals("claims", claims)
 	return c.Next()
+}
+
+// auditLogItem — структура записи журнала действий для таблицы
+type auditLogItem struct {
+	Time      string
+	User      string
+	Type      string // payment, login, error, edit, notice
+	TypeLabel string
+	Action    string
+	IPSource  string
+}
+
+// JournalPage GET /journal
+// JournalPage GET /journal
+func (h *Handler) JournalPage(c *fiber.Ctx) error {
+	user := h.currentUser(c)
+	if !user.IsAdmin() {
+		return c.Redirect("/", http.StatusFound)
+	}
+
+	tab := c.Query("tab", "all")
+	searchQuery := strings.TrimSpace(c.Query("q"))
+
+	realLogs, err := h.svc.AuditLogs()
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).SendString("Не удалось загрузить журнал")
+	}
+
+	var views []auditLogItem
+	authCount, actionCount := 0, 0
+
+	for _, l := range realLogs {
+		if l.Type == "login" || l.Type == "error" {
+			authCount++
+		} else {
+			actionCount++
+		}
+
+		if tab == "auth" && (l.Type != "login" && l.Type != "error") {
+			continue
+		}
+		if tab == "actions" && (l.Type == "login" || l.Type == "error") {
+			continue
+		}
+		if searchQuery != "" && !strings.Contains(strings.ToLower(l.Action), strings.ToLower(searchQuery)) && !strings.Contains(strings.ToLower(l.UserName), strings.ToLower(searchQuery)) {
+			continue
+		}
+
+		views = append(views, auditLogItem{
+			Time:      l.CreatedAt.Format("02 янв, 15:04"),
+			User:      l.UserName,
+			Type:      l.Type,
+			TypeLabel: l.TypeLabel,
+			Action:    l.Action,
+			IPSource:  l.IPSource,
+		})
+	}
+
+	users, _ := h.userViews()
+
+	return c.Render("journal", h.pageData(c, "Журнал действий", "journal", fiber.Map{
+		"Logs":        views,
+		"TotalCount":  len(realLogs),
+		"AuthCount":   authCount,
+		"ActionCount": actionCount,
+		"Tab":         tab,
+		"SearchQuery": searchQuery,
+		"Users":       users,
+	}))
+}
+
+// ExportJournalCSV GET /journal/export.csv
+func (h *Handler) ExportJournalCSV(c *fiber.Ctx) error {
+	user := h.currentUser(c)
+	if !user.IsAdmin() {
+		return c.Status(http.StatusForbidden).SendString("Доступ запрещен")
+	}
+
+	realLogs, err := h.svc.AuditLogs()
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).SendString("Ошибка экспорта")
+	}
+
+	c.Set(fiber.HeaderContentType, "text/csv; charset=utf-8")
+	c.Set(fiber.HeaderContentDisposition, "attachment; filename=\"journal_export.csv\"")
+
+	var b strings.Builder
+	b.WriteString("Время,Пользователь,Тип,Действие,IP / Источник\n")
+	for _, l := range realLogs {
+		b.WriteString(fmt.Sprintf("%s,\"%s\",\"%s\",\"%s\",\"%s\"\n",
+			l.CreatedAt.Format("2006-01-02 15:04:05"),
+			l.UserName,
+			l.TypeLabel,
+			strings.ReplaceAll(l.Action, "\"", "\"\""),
+			l.IPSource,
+		))
+	}
+
+	return c.SendString(b.String())
 }
 
 // sameOrigin проверяет Origin (или Referer, если Origin не передан) для
@@ -212,6 +315,7 @@ func (h *Handler) LoginSubmit(c *fiber.Ctx) error {
 		if h.limiter != nil {
 			h.limiter.Fail(client)
 		}
+		h.svc.LogEvent(nil, login, "error", "Ошибка входа", "Неверный логин или пароль", client)
 		return c.Status(http.StatusUnauthorized).Render("login", fiber.Map{
 			"Title": "Вход",
 			"Error": "Неверный логин или пароль",
@@ -396,11 +500,14 @@ func dashboardRedirect(c *fiber.Ctx, query string) error {
 }
 
 // Dashboard GET /
+// Dashboard GET /
 func (h *Handler) Dashboard(c *fiber.Ctx) error {
 	filter, owner := parseOwner(c.Query("owner"))
 
 	sortParam := c.Query("sort", "date_asc")
 	rangeParam := c.Query("range", "all")
+	statusParam := c.Query("status", "all") // <--- Новый параметр фильтрации по статусу
+	selectID, _ := strconv.ParseInt(c.Query("select"), 10, 64)
 
 	occurrences, err := h.occurrences(filter)
 	if err != nil {
@@ -415,8 +522,41 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).SendString("Не удалось загрузить пользователей")
 	}
 
-	// Превращаем в представления (views)
 	rows := h.views(occurrences)
+
+	// Фильтрация по статусу (Все, Не оплачено, Оплачено, Просрочено)
+	if statusParam != "all" {
+		var filteredStatusRows []occurrenceView
+		for _, r := range rows {
+			switch statusParam {
+			case "unpaid":
+				if r.Status == string(domain.StatusPlanned) || r.Status == string(domain.StatusDue) {
+					filteredStatusRows = append(filteredStatusRows, r)
+				}
+			case "paid":
+				if r.Status == string(domain.StatusPaid) {
+					filteredStatusRows = append(filteredStatusRows, r)
+				}
+			case "overdue":
+				if r.Status == string(domain.StatusOverdue) {
+					filteredStatusRows = append(filteredStatusRows, r)
+				}
+			}
+		}
+		rows = filteredStatusRows
+	}
+
+	// Ищем выбранный элемент для правой карточки
+	var selectedView *occurrenceView
+	if selectID > 0 {
+		for _, r := range rows {
+			if r.ID == selectID {
+				tmp := r
+				selectedView = &tmp
+				break
+			}
+		}
+	}
 
 	today := h.svc.Today()
 	if rangeParam != "all" {
@@ -433,8 +573,6 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 
 		var filteredRows []occurrenceView
 		for _, r := range rows {
-			// Парсим дату обратно или сравниваем строки (формат YYYY-MM-DD позволяет лексикографическое сравнение!)
-			// Рассматриваем периоды, которые наступают не позже limitDate
 			if r.DueDate <= limitDate.String() {
 				filteredRows = append(filteredRows, r)
 			}
@@ -457,17 +595,19 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		})
 	}
 
-	// 3. Передаем "Sort" в fiber.Map, чтобы шаблон знал текущую сортировку
 	return c.Render("dashboard", h.pageData(c, "Платежи", "dashboard", fiber.Map{
-		"Rows":       rows,
-		"Summary":    summary,
-		"Users":      users,
-		"Owner":      owner,
-		"Sort":       sortParam, // <--- ЭТОТ ПАРАМЕТР ВАЖЕН ДЛЯ СЕЛИКТОРА В HTML
-		"Range":      rangeParam,
-		"OwnerQuery": ownerParam(c.Query("owner")),
-		"Currencies": domain.Currencies,
-		"Periods":    domain.Periods,
+		"Rows":               rows,
+		"Summary":            summary,
+		"Users":              users,
+		"Owner":              owner,
+		"Sort":               sortParam,
+		"Range":              rangeParam,
+		"Status":             statusParam, // <--- Передаем статус в шаблон
+		"SelectedID":         selectID,
+		"SelectedOccurrence": selectedView,
+		"OwnerQuery":         ownerParam(c.Query("owner")),
+		"Currencies":         domain.Currencies,
+		"Periods":            domain.Periods,
 	}))
 }
 
@@ -485,24 +625,7 @@ func (h *Handler) summary(filter int64) (*app.Totals, error) {
 	return h.svc.SummaryAssigned(filter)
 }
 
-// MarkPaid POST /occurrences/:id/paid
-//
-// Одна форма обслуживает три действия кейса: отметить оплату, исправить
-// фактическую дату и снять отметку — всё через значение поля paid_at.
-func (h *Handler) MarkPaid(c *fiber.Ctx) error {
-	id, err := idParam(c)
-	if err != nil {
-		return err
-	}
-	if _, err := h.svc.SetPaid(id, strings.TrimSpace(c.FormValue("paid_at"))); err != nil {
-		return h.badRequest(c, err)
-	}
-	return dashboardRedirect(c, c.FormValue("owner"))
-}
-
 // SetOccurrenceDue POST /occurrences/:id/due
-//
-// Разовый перенос срока периода: шаблон и остальные периоды не меняются.
 func (h *Handler) SetOccurrenceDue(c *fiber.Ctx) error {
 	id, err := idParam(c)
 	if err != nil {
@@ -511,6 +634,27 @@ func (h *Handler) SetOccurrenceDue(c *fiber.Ctx) error {
 	if _, err := h.svc.SetOccurrenceDue(id, strings.TrimSpace(c.FormValue("due_date"))); err != nil {
 		return h.badRequest(c, err)
 	}
+	return dashboardRedirect(c, c.FormValue("owner"))
+}
+
+// MarkPaid POST /occurrences/:id/paid
+func (h *Handler) MarkPaid(c *fiber.Ctx) error {
+	id, err := idParam(c)
+	if err != nil {
+		return err
+	}
+	paidAtVal := strings.TrimSpace(c.FormValue("paid_at"))
+	if _, err := h.svc.SetPaid(id, paidAtVal); err != nil {
+		return h.badRequest(c, err)
+	}
+
+	user := h.currentUser(c)
+	actionDesc := "Отметил оплату периода #" + strconv.FormatInt(id, 10)
+	if paidAtVal == "" {
+		actionDesc = "Снял отметку об оплате периода #" + strconv.FormatInt(id, 10)
+	}
+	h.svc.LogEvent(&user.UserID, user.Login, "payment", "Оплата", actionDesc, c.IP())
+
 	return dashboardRedirect(c, c.FormValue("owner"))
 }
 
@@ -540,22 +684,188 @@ func (h *Handler) AssignOccurrenceOwner(c *fiber.Ctx) error {
 // ── Шаблоны платежей ──────────────────────────────────────────────────────
 
 // PaymentsPage GET /payments
+// PaymentsPage GET /payments
 func (h *Handler) PaymentsPage(c *fiber.Ctx) error {
-	payments, err := h.svc.PaymentsFiltered(false, filterAll)
+	tab := c.Query("tab", "active") // active, deleted, all
+	searchQuery := strings.TrimSpace(c.Query("q"))
+	sortParam := c.Query("sort", "created_desc") // по умолчанию
+
+	// Загружаем все шаблоны
+	allPayments, err := h.svc.Payments(false)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).SendString("Не удалось загрузить шаблоны")
 	}
+
+	var activeCount, deletedCount int
+	var filteredPayments []domain.RecurringPayment
+
+	for _, p := range allPayments {
+		// Фильтр по поисковому запросу (имени)
+		if searchQuery != "" && !strings.Contains(strings.ToLower(p.Name), strings.ToLower(searchQuery)) {
+			continue
+		}
+
+		if p.Active {
+			activeCount++
+			if tab == "active" || tab == "all" {
+				filteredPayments = append(filteredPayments, p)
+			}
+		} else {
+			deletedCount++
+			if tab == "deleted" || tab == "all" {
+				filteredPayments = append(filteredPayments, p)
+			}
+		}
+	}
+
+	// Сортировка
+	switch sortParam {
+	case "name_asc":
+		sort.Slice(filteredPayments, func(i, j int) bool {
+			return filteredPayments[i].Name < filteredPayments[j].Name
+		})
+	case "amount_desc":
+		sort.Slice(filteredPayments, func(i, j int) bool {
+			return filteredPayments[i].Amount.Major() > filteredPayments[j].Amount.Major()
+		})
+	case "amount_asc":
+		sort.Slice(filteredPayments, func(i, j int) bool {
+			return filteredPayments[i].Amount.Major() < filteredPayments[j].Amount.Major()
+		})
+	case "date_asc":
+		sort.Slice(filteredPayments, func(i, j int) bool {
+			return filteredPayments[i].FirstDue.String() < filteredPayments[j].FirstDue.String()
+		})
+	}
+
 	users, err := h.userViews()
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).SendString("Не удалось загрузить пользователей")
 	}
 
 	return c.Render("payments", h.pageData(c, "Шаблоны", "payments", fiber.Map{
-		"Payments":   payments,
-		"Users":      users,
-		"Currencies": domain.Currencies,
-		"Periods":    domain.Periods,
+		"Payments":     filteredPayments,
+		"Users":        users,
+		"Currencies":   domain.Currencies,
+		"Periods":      domain.Periods,
+		"Tab":          tab,
+		"SearchQuery":  searchQuery,
+		"Sort":         sortParam,
+		"ActiveCount":  activeCount,
+		"DeletedCount": deletedCount,
+		"TotalCount":   len(allPayments),
 	}))
+}
+func (h *Handler) IndexGet(c *fiber.Ctx) error {
+	// Получаем текущего пользователя из сессии / контекста
+	user, err := h.getCurrentUser(c) // или ваш метод получения пользователя из сессии
+	if err != nil {
+		return c.Redirect("/login", http.StatusFound)
+	}
+
+	// Если это админ, он видит полноценный дашборд со всеми платежами и управлением
+	if user.IsAdmin() {
+		payments, err := h.svc.PaymentsFiltered(true, app.NoUserFilter)
+		if err != nil {
+			return err
+		}
+		totals, err := h.svc.Summary()
+		if err != nil {
+			return err
+		}
+		users, err := h.svc.Users()
+		if err != nil {
+			return err
+		}
+
+		return c.Render("dashboard", fiber.Map{
+			"User":     user,
+			"Payments": payments,
+			"Totals":   totals,
+			"Users":    users,
+			// другие параметры фильтрации для админа...
+		})
+	}
+
+	// Если это обычный пользователь, он видит ТОЛЬКО свои платежи и свою сводку
+	payments, err := h.svc.PaymentsFiltered(true, user.ID)
+	if err != nil {
+		return err
+	}
+	totals, err := h.svc.SummaryAssigned(user.ID)
+	if err != nil {
+		return err
+	}
+
+	return c.Render("dashboard", fiber.Map{
+		"User":     user,
+		"Payments": payments,
+		"Totals":   totals,
+		// Обычному пользователю список всех users передавать не нужно (или передавать только его самого)
+	})
+}
+
+// CalendarPage отображает персональный календарь пользователя
+func (h *Handler) CalendarPage(c *fiber.Ctx) error {
+	user, err := h.getCurrentUser(c)
+	if err != nil {
+		return c.Redirect("/login", http.StatusFound)
+	}
+
+	if user.IsAdmin() {
+		return c.Redirect("/", http.StatusFound)
+	}
+
+	// Используем стандартный пакет time для получения текущего года и месяца
+	t := time.Now()
+	year := t.Year()
+	month := int(t.Month())
+
+	calendarDays, periodStr, err := h.svc.MonthlyCalendar(user.ID, year, month)
+	if err != nil {
+		return err
+	}
+
+	return c.Render("calendar", fiber.Map{
+		"User":         user,
+		"CalendarDays": calendarDays,
+		"Period":       periodStr,
+	})
+}
+
+// BudgetPage отображает персональный бюджет и графики пользователя
+func (h *Handler) BudgetPage(c *fiber.Ctx) error {
+	user, err := h.getCurrentUser(c)
+	if err != nil {
+		return c.Redirect("/login", http.StatusFound)
+	}
+
+	if user.IsAdmin() {
+		return c.Redirect("/", http.StatusFound)
+	}
+
+	year := time.Now().Year()
+
+	budgetTotals, err := h.svc.BudgetForUser(user.ID, year, 0)
+	if err != nil {
+		return err
+	}
+
+	return c.Render("budget", fiber.Map{
+		"User":   user,
+		"Budget": budgetTotals,
+		"Year":   year,
+	})
+}
+
+// getCurrentUser достает текущего авторизованного пользователя из контекста Fiber или сессии
+func (h *Handler) getCurrentUser(c *fiber.Ctx) (*domain.User, error) {
+	// Если пользователь сохраняется в c.Locals вашим middleware авторизации:
+	if user, ok := c.Locals("user").(*domain.User); ok && user != nil {
+		return user, nil
+	}
+
+	return nil, domain.ErrNotFound
 }
 
 // PaymentEditPage GET /payments/:id/edit
@@ -588,11 +898,15 @@ func (h *Handler) PaymentEditPage(c *fiber.Ctx) error {
 
 // CreatePayment POST /payments
 func (h *Handler) CreatePayment(c *fiber.Ctx) error {
-	payment, err := h.svc.CreatePayment(paymentForm(c))
+	form := paymentForm(c)
+	_, err := h.svc.CreatePayment(form)
 	if err != nil {
 		return h.badRequest(c, err)
 	}
-	return c.Redirect("/payments/"+strconv.FormatInt(payment.ID, 10)+"/edit", http.StatusFound)
+	user := h.currentUser(c)
+	h.svc.LogEvent(&user.UserID, user.Login, "edit", "Изменение", fmt.Sprintf("Создал платёж · %s", form.Name), c.IP())
+
+	return paymentsRedirect(c, "Платёж успешно создан")
 }
 
 func (h *Handler) DeletePayment(c *fiber.Ctx) error {
@@ -692,12 +1006,44 @@ func (h *Handler) UsersPage(c *fiber.Ctx) error {
 }
 
 // CreateUser POST /users
+// CreateUser POST /users
 func (h *Handler) CreateUser(c *fiber.Ctx) error {
 	login := strings.TrimSpace(c.FormValue("login"))
-	if _, err := h.svc.CreateUser(login); err != nil {
+	password := strings.TrimSpace(c.FormValue("password"))
+
+	if _, err := h.svc.CreateUserWithPassword(login, password); err != nil {
 		return h.badRequest(c, err)
 	}
-	return usersRedirect(c, "Пользователь «"+login+"» создан")
+	return usersRedirect(c, "Пользователь «"+login+"» успешно создан")
+}
+
+// LoginPost POST /login
+// LoginPost POST /login
+func (h *Handler) LoginPost(c *fiber.Ctx) error {
+	login := strings.TrimSpace(c.FormValue("login"))
+	password := c.FormValue("password")
+
+	// Вызываем метод аутентификации из сервиса приложения
+	user, err := h.svc.Authenticate(login, password)
+	if err != nil {
+		return c.Render("login", fiber.Map{
+			"Error": "Неверный логин или пароль",
+			"Login": login,
+		})
+	}
+
+	// Если сессии в проекте реализованы через куки или fiber-сессии,
+	// сохраняем данные пользователя (например, через h.sessions или стандартные cookies Fiber):
+	c.Cookie(&fiber.Cookie{
+		Name:  "user_id",
+		Value: fmt.Sprintf("%d", user.ID),
+	})
+	c.Cookie(&fiber.Cookie{
+		Name:  "user_login",
+		Value: user.Login,
+	})
+
+	return c.Redirect("/", http.StatusFound)
 }
 
 // UpdateUser POST /users/:id

@@ -29,6 +29,16 @@ func Templates() *html.Engine {
 	}
 	engine := html.NewFileSystem(http.FS(sub), ".html")
 	engine.AddFunc("periodLabel", periodLabel)
+
+	// ДОБАВЛЯЕМ МАТЕМАТИЧЕСКИЕ ФУНКЦИИ ДЛЯ ШАБЛОНОВ:
+	engine.AddFunc("mul", func(a, b float64) float64 { return a * b })
+	engine.AddFunc("div", func(a, b float64) float64 {
+		if b == 0 {
+			return 0
+		}
+		return a / b
+	})
+
 	return engine
 }
 
