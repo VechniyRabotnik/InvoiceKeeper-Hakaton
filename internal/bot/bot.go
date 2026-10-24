@@ -383,6 +383,18 @@ func handleCommand(svc *app.App, ch Channel, cmd Command) {
 		if err != nil {
 			log.Printf("telegram: ошибка смены даты для чата %s: %v", cmd.ChatID, err)
 		}
+	case "/budget":
+		reply, err = handleBudgetCommand(svc, cmd.ChatID, cmd.Text)
+		if err != nil {
+			log.Printf("telegram: ошибка расчета бюджета для чата %s: %v", cmd.ChatID, err)
+			reply = "Не удалось рассчитать бюджет."
+		}
+	case "/calendar", "/cal":
+		reply, err = handleCalendarCommand(svc, cmd.ChatID, cmd.Text)
+		if err != nil {
+			log.Printf("telegram: ошибка генерации календаря для чата %s: %v", cmd.ChatID, err)
+			reply = "Не удалось сформировать календарь оплат."
+		}
 	case "/summary":
 		text, err := summaryText(svc)
 		if err != nil {
@@ -742,6 +754,126 @@ func sendUnpaidListForCancel(svc *app.App, ch Channel, chatID string) error {
 	}
 
 	return ch.SendText(chatID, b.String())
+}
+
+// handleCalendarCommand выводит расписание платежей по дням на выбранный месяц.
+func handleCalendarCommand(svc *app.App, chatID string, text string) (string, error) {
+	user, err := svc.UserByChat(chatID)
+	if err != nil {
+		return "⚠️ Ваш Telegram чат не привязан к учетной записи.", nil
+	}
+
+	today := svc.Today()
+	var year, month int
+	_, _ = fmt.Sscanf(today.String(), "%d-%d", &year, &month)
+	if year == 0 {
+		year = 2026
+		month = 10
+	}
+
+	// Проверяем, передал ли пользователь конкретный месяц в аргументе, напр: /calendar 2026-11
+	args := strings.Fields(text)
+	if len(args) > 1 {
+		arg := args[1]
+		var y, m int
+		if _, parseErr := fmt.Sscanf(arg, "%d-%d", &y, &m); parseErr == nil && m >= 1 && m <= 12 {
+			year = y
+			month = m
+		}
+	}
+
+	calendarDays, periodStr, err := svc.MonthlyCalendar(user.ID, year, month)
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "📅 Календарь оплат на %s\n", periodStr)
+	b.WriteString("────────────────────────\n\n")
+
+	if len(calendarDays) == 0 {
+		return fmt.Sprintf("📭 На %s плановых платежей не найдено.", periodStr), nil
+	}
+
+	for _, day := range calendarDays {
+		fmt.Fprintf(&b, "📆 %s\n", day.Date)
+		for _, o := range day.Items {
+			statusIcon := "⏳"
+			if o.PaidAt != nil {
+				statusIcon = "✅"
+			} else if o.Status == domain.StatusOverdue {
+				statusIcon = "🔴"
+			}
+
+			fmt.Fprintf(&b, "  %s %s — %s [ID: %d]\n",
+				statusIcon, o.PaymentName, o.Amount.String(o.Currency), o.ID)
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("💡 Совет: Чтобы посмотреть другой месяц, укажите его, например:/calendar 2026-11")
+	return b.String(), nil
+}
+
+// handleBudgetCommand формирует отчет по плановым расходам на месяц или год.
+func handleBudgetCommand(svc *app.App, chatID string, text string) (string, error) {
+	user, err := svc.UserByChat(chatID)
+	if err != nil {
+		return "⚠️ Ваш Telegram чат не привязан к учетной записи.", nil
+	}
+
+	today := svc.Today()
+	// Парсим год и месяц из строкового представления даты (YYYY-MM-DD)
+	var year, month int
+	_, _ = fmt.Sscanf(today.String(), "%d-%d", &year, &month)
+	if year == 0 {
+		year = 2026
+		month = 10
+	}
+
+	args := strings.Fields(text)
+	if len(args) > 1 {
+		arg := strings.ToLower(args[1])
+		if arg == "year" || arg == "год" {
+			month = 0 // Бюджет на весь текущий год
+		} else if strings.Contains(arg, "-") {
+			// Формат YYYY-MM
+			var y, m int
+			if _, parseErr := fmt.Sscanf(arg, "%d-%d", &y, &m); parseErr == nil && m >= 1 && m <= 12 {
+				year = y
+				month = m
+			}
+		} else if y, parseErr := strconv.Atoi(arg); parseErr == nil && y > 2000 {
+			year = y
+			month = 0 // Задан конкретный год
+		}
+	}
+
+	budget, err := svc.BudgetForUser(user.ID, year, month)
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "📊 Плановый бюджет на %s\n", budget.Period)
+	b.WriteString("────────────────────────\n\n")
+
+	if budget.TotalCount == 0 {
+		b.WriteString("📭 На этот период плановых расходов не запланировано.")
+		return b.String(), nil
+	}
+
+	b.WriteString("💰 Запланировано к оплате:\n")
+	for _, curr := range domain.Currencies {
+		if val, ok := budget.ByCurrency[curr]; ok && val > 0 {
+			fmt.Fprintf(&b, "• %s: %.2f\n", curr, val)
+		}
+	}
+
+	fmt.Fprintf(&b, "\n📌 Всего платежей в периоде: %d", budget.TotalCount)
+	b.WriteString("\n\n💡 Совет: Для бюджета на год используйте /budget year")
+
+	return b.String(), nil
 }
 
 // handleSetDateCommand обрабатывает команду /setdate ID ГГГГ-ММ-ДД

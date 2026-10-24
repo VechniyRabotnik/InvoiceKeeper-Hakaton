@@ -162,6 +162,8 @@ func (t *Telegram) RegisterCommands() error {
 			{"command": "unpay", "description": "Отменить отметку об оплате платежа"},
 			{"command": "setdate", "description": "Указать/изменить дату оплаты (формат: /setdate ID 2026-10-24)"},
 			{"command": "overdue", "description": "Мои просрочки по оплате"},
+			{"command": "calendar", "description": "Календарь оплат на месяц (можно указать месяц, напр: /calendar 2026-11)"},
+			{"command": "budget", "description": "Плановый бюджет на месяц или год"},
 			{"command": "id", "description": "ID этого чата"},
 			{"command": "unsubscribe", "description": "Отключить напоминания"},
 			{"command": "help", "description": "Список команд"},

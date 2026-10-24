@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -227,6 +228,85 @@ type PaymentInput struct {
 	Period   domain.Period   `json:"period"`
 	DueDate  string          `json:"due_date"`
 	UserID   int64           `json:"user_id"`
+}
+type BudgetTotals struct {
+	Period     string // например: "2026-10" или "2026 год"
+	ByCurrency map[domain.Currency]float64
+	TotalCount int
+}
+type CalendarDay struct {
+	Date  string
+	Items []domain.Occurrence
+}
+
+func (a *App) MonthlyCalendar(userID int64, year int, month int) ([]CalendarDay, string, error) {
+	occurrences, err := a.OccurrencesFiltered(0, userID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	periodStr := fmt.Sprintf("%04d-%02d", year, month)
+	daysMap := make(map[string][]domain.Occurrence)
+
+	for _, o := range occurrences {
+		dueStr := o.DueDate.String()
+		if !strings.HasPrefix(dueStr, periodStr) {
+			continue
+		}
+		daysMap[dueStr] = append(daysMap[dueStr], o)
+	}
+
+	// Сортируем дни по возрастанию дат
+	var dates []string
+	for d := range daysMap {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+
+	var calendar []CalendarDay
+	for _, d := range dates {
+		calendar = append(calendar, CalendarDay{
+			Date:  d,
+			Items: daysMap[d],
+		})
+	}
+
+	return calendar, periodStr, nil
+}
+
+// BudgetForUser рассчитывает плановые расходы пользователя за указанный год и месяц (если month > 0).
+// Если month == 0, рассчитывается плановый бюджет на весь год.
+func (a *App) BudgetForUser(userID int64, year int, month int) (*BudgetTotals, error) {
+	// Получаем все периоды пользователя
+	occurrences, err := a.OccurrencesFiltered(0, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	totals := &BudgetTotals{
+		ByCurrency: make(map[domain.Currency]float64),
+	}
+
+	var prefix string
+	if month > 0 {
+		prefix = fmt.Sprintf("%04d-%02d", year, month)
+		totals.Period = prefix
+	} else {
+		prefix = fmt.Sprintf("%04d", year)
+		totals.Period = fmt.Sprintf("%04d год", year)
+	}
+
+	for _, o := range occurrences {
+		// Фильтруем по строковому префиксу даты (например, "2026-10" или "2026")
+		if !strings.HasPrefix(o.DueDate.String(), prefix) {
+			continue
+		}
+
+		totals.ByCurrency[o.Currency] += o.Amount.Major()
+		totals.TotalCount++
+	}
+
+	return totals, nil
 }
 
 // CreatePayment сохраняет шаблон и создаёт его периоды.
