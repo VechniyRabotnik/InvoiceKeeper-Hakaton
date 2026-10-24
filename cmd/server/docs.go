@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/aeza/invoice-keeper/docs"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/docs"
 )
 
 // registerDocs отдаёт спецификацию и Swagger UI.

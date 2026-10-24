@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aeza/invoice-keeper/internal/app"
-	"github.com/aeza/invoice-keeper/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/app"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
 )
 
 // httpDoer — минимальный транспорт. Подменяется в тестах, чтобы проверять
@@ -157,6 +157,11 @@ func (t *Telegram) RegisterCommands() error {
 		"commands": []map[string]string{
 			{"command": "start", "description": "Получать напоминания об оплате"},
 			{"command": "summary", "description": "Итоги и ближайшие платежи"},
+			{"command": "payments", "description": "Мои платежи (можно указать месяц, напр: /payments 2026-11)"},
+			{"command": "pay", "description": "Выбрать платеж и отметить его оплаченным"},
+			{"command": "unpay", "description": "Отменить отметку об оплате платежа"},
+			{"command": "setdate", "description": "Указать/изменить дату оплаты (формат: /setdate ID 2026-10-24)"},
+			{"command": "overdue", "description": "Мои просрочки по оплате"},
 			{"command": "id", "description": "ID этого чата"},
 			{"command": "unsubscribe", "description": "Отключить напоминания"},
 			{"command": "help", "description": "Список команд"},

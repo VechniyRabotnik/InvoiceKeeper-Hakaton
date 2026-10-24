@@ -14,16 +14,17 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/aeza/invoice-keeper/internal/app"
-	"github.com/aeza/invoice-keeper/internal/domain"
-	"github.com/aeza/invoice-keeper/internal/ratelimit"
-	"github.com/aeza/invoice-keeper/internal/session"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/app"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/ratelimit"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/session"
 )
 
 const sessionCookie = "ik_session"
@@ -75,11 +76,13 @@ func (h *Handler) Register(r fiber.Router) {
 	r.Post("/payments/:id/owner", h.requireAuth, h.requireAdmin, h.AssignPaymentOwner)
 	r.Post("/payments/:id/stop", h.requireAuth, h.requireAdmin, h.StopPayment)
 	r.Post("/payments/:id/resume", h.requireAuth, h.requireAdmin, h.ResumePayment)
+	r.Post("/payments/:id/delete", h.requireAuth, h.requireAdmin, h.DeletePayment)
 
 	// Пользователи.
 	r.Get("/users", h.requireAuth, h.requireAdmin, h.UsersPage)
 	r.Post("/users", h.requireAuth, h.requireAdmin, h.CreateUser)
 	r.Post("/users/:id", h.requireAuth, h.requireAdmin, h.UpdateUser)
+	r.Post("/users/:id/chat", h.requireAuth, h.requireAdmin, h.BindTelegramChat)
 	r.Post("/users/:id/delete", h.requireAuth, h.requireAdmin, h.DeleteUser)
 }
 
@@ -234,6 +237,19 @@ func (h *Handler) LoginSubmit(c *fiber.Ctx) error {
 	return c.Redirect("/", http.StatusFound)
 }
 
+// BindTelegramChat POST /users/:id/chat
+func (h *Handler) BindTelegramChat(c *fiber.Ctx) error {
+	id, err := idParam(c)
+	if err != nil {
+		return err
+	}
+	chatID := strings.TrimSpace(c.FormValue("tg_chat_id"))
+	if err := h.svc.SetUserChat(id, chatID); err != nil {
+		return h.badRequest(c, err)
+	}
+	return usersRedirect(c, "Telegram чат успешно привязан")
+}
+
 // Logout POST /logout
 func (h *Handler) Logout(c *fiber.Ctx) error {
 	if !sameOrigin(c) {
@@ -255,6 +271,7 @@ type occurrenceView struct {
 	PaymentID   int64
 	PaymentName string
 	Amount      string
+	RawAmount   float64
 	UserID      int64
 	UserName    string
 	DueDate     string
@@ -281,6 +298,7 @@ func (h *Handler) views(list []domain.Occurrence) []occurrenceView {
 			PaymentID:   o.PaymentID,
 			PaymentName: o.PaymentName,
 			Amount:      fmt.Sprintf("%s %.2f", o.Currency, o.Amount.Major()),
+			RawAmount:   o.Amount.Major(),
 			UserID:      o.UserID,
 			UserName:    o.UserName,
 			DueDate:     o.DueDate.String(),
@@ -312,15 +330,17 @@ func (h *Handler) userViews() ([]userView, error) {
 	}
 	out := make([]userView, 0, len(users))
 	for i := range users {
-		count := 0
-		if !users[i].IsAdmin() {
-			payments, err := h.svc.PaymentsFiltered(false, users[i].ID)
-			if err != nil {
-				return nil, err
-			}
-			count = len(payments)
+
+		if users[i].IsAdmin() {
+			continue
 		}
-		out = append(out, userView{User: &users[i], Payments: count})
+
+		payments, err := h.svc.PaymentsFiltered(false, users[i].ID)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, userView{User: &users[i], Payments: len(payments)})
 	}
 	return out, nil
 }
@@ -379,6 +399,9 @@ func dashboardRedirect(c *fiber.Ctx, query string) error {
 func (h *Handler) Dashboard(c *fiber.Ctx) error {
 	filter, owner := parseOwner(c.Query("owner"))
 
+	sortParam := c.Query("sort", "date_asc")
+	rangeParam := c.Query("range", "all")
+
 	occurrences, err := h.occurrences(filter)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).SendString("Не удалось загрузить платежи")
@@ -392,11 +415,56 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).SendString("Не удалось загрузить пользователей")
 	}
 
+	// Превращаем в представления (views)
+	rows := h.views(occurrences)
+
+	today := h.svc.Today()
+	if rangeParam != "all" {
+		var monthsToAdd int
+		switch rangeParam {
+		case "1m":
+			monthsToAdd = 1
+		case "3m":
+			monthsToAdd = 3
+		case "6m":
+			monthsToAdd = 6
+		}
+		limitDate := today.AddMonths(monthsToAdd)
+
+		var filteredRows []occurrenceView
+		for _, r := range rows {
+			// Парсим дату обратно или сравниваем строки (формат YYYY-MM-DD позволяет лексикографическое сравнение!)
+			// Рассматриваем периоды, которые наступают не позже limitDate
+			if r.DueDate <= limitDate.String() {
+				filteredRows = append(filteredRows, r)
+			}
+		}
+		rows = filteredRows
+	}
+
+	switch sortParam {
+	case "date_asc":
+		sort.Slice(rows, func(i, j int) bool {
+			return rows[i].DueDate < rows[j].DueDate
+		})
+	case "date_desc":
+		sort.Slice(rows, func(i, j int) bool {
+			return rows[i].DueDate > rows[j].DueDate
+		})
+	case "amount_desc":
+		sort.Slice(rows, func(i, j int) bool {
+			return rows[i].RawAmount > rows[j].RawAmount
+		})
+	}
+
+	// 3. Передаем "Sort" в fiber.Map, чтобы шаблон знал текущую сортировку
 	return c.Render("dashboard", h.pageData(c, "Платежи", "dashboard", fiber.Map{
-		"Rows":       h.views(occurrences),
+		"Rows":       rows,
 		"Summary":    summary,
 		"Users":      users,
 		"Owner":      owner,
+		"Sort":       sortParam, // <--- ЭТОТ ПАРАМЕТР ВАЖЕН ДЛЯ СЕЛИКТОРА В HTML
+		"Range":      rangeParam,
 		"OwnerQuery": ownerParam(c.Query("owner")),
 		"Currencies": domain.Currencies,
 		"Periods":    domain.Periods,
@@ -527,6 +595,17 @@ func (h *Handler) CreatePayment(c *fiber.Ctx) error {
 	return c.Redirect("/payments/"+strconv.FormatInt(payment.ID, 10)+"/edit", http.StatusFound)
 }
 
+func (h *Handler) DeletePayment(c *fiber.Ctx) error {
+	id, err := idParam(c)
+	if err != nil {
+		return err
+	}
+	if err := h.svc.DeletePayment(id); err != nil {
+		return h.badRequest(c, err)
+	}
+	return paymentsRedirect(c, "Платёж полностью удалён")
+}
+
 // UpdatePayment POST /payments/:id
 func (h *Handler) UpdatePayment(c *fiber.Ctx) error {
 	id, err := idParam(c)
@@ -615,7 +694,7 @@ func (h *Handler) UsersPage(c *fiber.Ctx) error {
 // CreateUser POST /users
 func (h *Handler) CreateUser(c *fiber.Ctx) error {
 	login := strings.TrimSpace(c.FormValue("login"))
-	if _, err := h.svc.CreateUser(login, c.FormValue("password")); err != nil {
+	if _, err := h.svc.CreateUser(login); err != nil {
 		return h.badRequest(c, err)
 	}
 	return usersRedirect(c, "Пользователь «"+login+"» создан")
@@ -627,7 +706,7 @@ func (h *Handler) UpdateUser(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	updated, err := h.svc.UpdateUser(id, strings.TrimSpace(c.FormValue("login")), c.FormValue("password"))
+	updated, err := h.svc.UpdateUser(id, strings.TrimSpace(c.FormValue("login")))
 	if err != nil {
 		return h.badRequest(c, err)
 	}

@@ -128,15 +128,28 @@ func (a Amount) MarshalJSON() ([]byte, error) {
 
 // User — учётная запись. Администратор заводится из .env при старте и ролью
 // admin помечен, чтобы через панель его нельзя было изменить или удалить.
+//
+// Обычному пользователю пароль не нужен: у него нет доступа к панели, весь
+// контакт с ним идёт через Telegram по TGChatID, который закрепляется за
+// учётной записью после /start в боте.
 type User struct {
 	ID           int64     `json:"id"`
 	Login        string    `json:"login"`
 	PasswordHash string    `json:"-"`
 	Role         Role      `json:"role"`
+	TGChatID     string    `json:"tg_chat_id,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
 func (u *User) IsAdmin() bool { return u.Role == RoleAdmin }
+
+// DeliveryTarget — чат, которому доставлять уведомления: персональный чат
+// пользователя либо чат администратора, которому интересно всё сразу.
+type DeliveryTarget struct {
+	UserID int64
+	ChatID string
+	Admin  bool
+}
 
 // Day — календарная дата без времени суток и без часового пояса.
 //

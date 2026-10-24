@@ -36,7 +36,24 @@
   <div class="card-head">
     <h2>Периоды оплат</h2>
     <div class="spacer"></div>
-    <form method="get" action="/" class="filters">
+    
+    <!-- Форма фильтров, периода и сортировки -->
+    <form method="get" action="/" class="filters inline">
+      <label for="range">Период</label>
+      <select id="range" name="range" onchange="this.form.submit()">
+        <option value="all" {{if eq .Range "all"}}selected{{end}}>Все будущие</option>
+        <option value="1m" {{if eq .Range "1m"}}selected{{end}}>Ближайший 1 месяц</option>
+        <option value="3m" {{if eq .Range "3m"}}selected{{end}}>Ближайшие 3 месяца</option>
+        <option value="6m" {{if eq .Range "6m"}}selected{{end}}>Ближайшие 6 месяцев</option>
+      </select>
+
+      <label for="sort">Сортировка</label>
+      <select id="sort" name="sort" onchange="this.form.submit()">
+        <option value="date_asc" {{if eq .Sort "date_asc"}}selected{{end}}>По сроку (сначала близкие)</option>
+        <option value="date_desc" {{if eq .Sort "date_desc"}}selected{{end}}>По сроку (сначала далёкие)</option>
+        <option value="amount_desc" {{if eq .Sort "amount_desc"}}selected{{end}}>По сумме (убывание)</option>
+      </select>
+
       <label for="owner">Ответственный</label>
       <select id="owner" name="owner" onchange="this.form.submit()">
         <option value="all" {{if eq .Owner "all"}}selected{{end}}>Все платежи</option>

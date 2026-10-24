@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aeza/invoice-keeper/internal/config"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/config"
 )
 
 // withEnv выставляет переменные на время теста и восстанавливает их после.

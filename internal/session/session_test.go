@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aeza/invoice-keeper/internal/domain"
-	"github.com/aeza/invoice-keeper/internal/session"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/session"
 )
 
 func testUser() *domain.User {

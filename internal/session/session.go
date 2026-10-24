@@ -12,7 +12,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/aeza/invoice-keeper/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
 )
 
 // Claims — содержимое токена. ID (jti) нужен, чтобы отозвать конкретную сессию

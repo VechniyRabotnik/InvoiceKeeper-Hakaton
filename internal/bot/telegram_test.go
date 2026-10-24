@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aeza/invoice-keeper/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
 )
 
 // fakeAPI поднимает сервер, повторяющий форму ответов Telegram Bot API, и

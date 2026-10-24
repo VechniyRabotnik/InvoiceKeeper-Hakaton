@@ -12,8 +12,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/aeza/invoice-keeper/internal/domain"
-	"github.com/aeza/invoice-keeper/internal/storage"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/storage"
 )
 
 // ReminderLeadDays — за сколько дней до срока приходит напоминание.
@@ -105,6 +105,10 @@ func (a *App) Sync() error {
 	return nil
 }
 
+func (a *App) DeletePayment(id int64) error {
+	return a.store.DeletePayment(id)
+}
+
 // ── доступ ────────────────────────────────────────────────────────────────
 
 // Authenticate проверяет пару логин/пароль и возвращает учётную запись.
@@ -138,21 +142,17 @@ func (a *App) SessionRevoked(jti string) (bool, error) {
 }
 
 // ── пользователи ──────────────────────────────────────────────────────────
+// unusableHash — заведомо неверный хеш для обычных пользователей, у которых нет доступа к панели.
+const unusableHash = "$2a$10$UnusableHashForRegularUsersWithoutPanelAccess000000000000000"
 
-// CreateUser создаёт обычного пользователя. Пароль хэшируется здесь — наружу
-// хеш не выходит никогда.
-func (a *App) CreateUser(login, password string) (*domain.User, error) {
-	if login == "" {
-		return nil, domain.Invalid("login is required")
+// CreateUser создаёт обычного пользователя. Пароль не задается: у обычной
+// учётной записи нет доступа к панели, весь её контакт с системой — Telegram
+// по закреплённому чату. Поэтому в базе остаётся заведомо неверный хеш.
+func (a *App) CreateUser(login string) (*domain.User, error) {
+	if len(login) < 3 {
+		return nil, domain.Invalid("login must be at least 3 characters")
 	}
-	if err := validateCredentials(login, password); err != nil {
-		return nil, err
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, fmt.Errorf("hash password: %w", err)
-	}
-	id, err := a.store.CreateUser(login, string(hash), string(domain.RoleUser))
+	id, err := a.store.CreateUser(login, unusableHash, string(domain.RoleUser))
 	if err != nil {
 		return nil, err
 	}
@@ -163,10 +163,17 @@ func (a *App) Users() ([]domain.User, error) { return a.store.ListUsers() }
 
 func (a *App) User(id int64) (*domain.User, error) { return a.store.UserByID(id) }
 
-// UpdateUser меняет логин и/или пароль; пустые значения означают «не менять».
-// Учётная запись администратора защищена: по условию кейса она управляется
-// только через .env.
-func (a *App) UpdateUser(id int64, login, password string) (*domain.User, error) {
+// UserByChat — учётная запись по Telegram-чату.
+func (a *App) UserByChat(chatID string) (*domain.User, error) {
+	if chatID == "" {
+		return nil, domain.ErrNotFound
+	}
+	return a.store.UserByChat(chatID)
+}
+
+// UpdateUser меняет логин; пустое значение означает «не менять». Учётная
+// запись администратора защищена: она управляется только через .env.
+func (a *App) UpdateUser(id int64, login string) (*domain.User, error) {
 	target, err := a.store.UserByID(id)
 	if err != nil {
 		return nil, err
@@ -174,23 +181,13 @@ func (a *App) UpdateUser(id int64, login, password string) (*domain.User, error)
 	if target.IsAdmin() {
 		return nil, domain.Invalid("учётная запись администратора управляется через .env")
 	}
-	if login == "" && password == "" {
+	if login == "" || login == target.Login {
 		return target, nil
 	}
-
-	hash := ""
-	if password != "" {
-		if err := validateCredentials("", password); err != nil {
-			return nil, err
-		}
-		b, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if err != nil {
-			return nil, fmt.Errorf("hash password: %w", err)
-		}
-		hash = string(b)
+	if len(login) < 3 {
+		return nil, domain.Invalid("login must be at least 3 characters")
 	}
-
-	if err := a.store.UpdateUser(id, login, hash); err != nil {
+	if err := a.store.UpdateUser(id, login, ""); err != nil {
 		return nil, err
 	}
 	return a.store.UserByID(id)
@@ -273,6 +270,10 @@ func (a *App) Payment(id int64) (*domain.RecurringPayment, error) {
 
 func (a *App) Payments(activeOnly bool) ([]domain.RecurringPayment, error) {
 	return a.store.ListPayments(activeOnly)
+}
+
+func (a *App) SetUserChat(userID int64, chatID string) error {
+	return a.store.SetUserChat(userID, chatID)
 }
 
 // PaymentsFiltered — шаблоны с фильтром по ответственному: NoUserFilter без
@@ -614,6 +615,36 @@ func (a *App) PendingReminders() ([]domain.Occurrence, error) {
 			continue // дубль
 		case o.DueDate.After(limit):
 			continue // слишком рано
+		}
+		out = append(out, o)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].DueDate.Before(out[j].DueDate) })
+	return out, nil
+}
+
+// PendingRemindersForUser возвращает напоминания строго для указанного пользователя.
+func (a *App) PendingRemindersForUser(userID int64) ([]domain.Occurrence, error) {
+	limit := a.Today().AddDays(ReminderLeadDays)
+
+	// Получаем периоды, отфильтрованные по ID пользователя
+	list, err := a.store.ListOccurrencesFiltered(0, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]domain.Occurrence, 0, len(list))
+	today := a.Today()
+	for _, o := range list {
+		o.ResolveStatus(today)
+		switch {
+		case !o.Active:
+			continue
+		case !o.Unpaid():
+			continue
+		case o.ReminderSent:
+			continue
+		case o.DueDate.After(limit):
+			continue
 		}
 		out = append(out, o)
 	}

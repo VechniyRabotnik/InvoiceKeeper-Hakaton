@@ -9,8 +9,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/aeza/invoice-keeper/internal/domain"
-	"github.com/aeza/invoice-keeper/internal/storage"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/storage"
 )
 
 func newStore(t *testing.T) *storage.Store {

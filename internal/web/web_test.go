@@ -12,10 +12,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/aeza/invoice-keeper/internal/app"
-	"github.com/aeza/invoice-keeper/internal/session"
-	"github.com/aeza/invoice-keeper/internal/storage"
-	"github.com/aeza/invoice-keeper/internal/web"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/app"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/session"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/storage"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/web"
 )
 
 // newApp собирает панель с реальными шаблонами: тесты проверяют и разметку,

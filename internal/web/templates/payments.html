@@ -39,7 +39,11 @@
       <label for="user_id">Ответственный</label>
       <select id="user_id" name="user_id">
         <option value="0">не назначен</option>
-        {{range .Users}}<option value="{{.ID}}">{{.Login}}</option>{{end}}
+            {{range .Users}}
+      {{if not .IsAdmin}}
+        <option value="{{.ID}}">{{.Login}}</option>
+      {{end}}
+    {{end}}
       </select>
     </div>
     <button>Добавить</button>
@@ -84,19 +88,25 @@
           {{if .Active}}<span class="badge b-paid">активен</span>{{else}}<span class="badge b-off">остановлен</span>{{end}}
         </td>
         <td>
-          <div class="inline">
-            <a class="nowrap" href="/payments/{{.ID}}/edit"><button class="mini ghost" type="button">Изменить</button></a>
-            {{if .Active}}
-            <form method="post" action="/payments/{{.ID}}/stop"
-                  onsubmit="return confirm('Прекратить платёж? История оплат сохранится, напоминания остановятся.')">
-              <button class="ghost mini">Прекратить</button>
-            </form>
-            {{else}}
-            <form method="post" action="/payments/{{.ID}}/resume">
-              <button class="mini">Возобновить</button>
-            </form>
-            {{end}}
-          </div>
+        <div class="inline">
+          <a class="nowrap" href="/payments/{{.ID}}/edit"><button class="mini ghost" type="button">Изменить</button></a>
+          {{if .Active}}
+          <form method="post" action="/payments/{{.ID}}/stop"
+                onsubmit="return confirm('Прекратить платёж? История оплат сохранится, напоминания остановятся.')">
+            <button class="ghost mini">Прекратить</button>
+          </form>
+          {{else}}
+          <form method="post" action="/payments/{{.ID}}/resume">
+            <button class="mini">Возобновить</button>
+          </form>
+          {{end}}
+          
+          <!-- Кнопка полного удаления -->
+          <form method="post" action="/payments/{{.ID}}/delete"
+                onsubmit="return confirm('ВНИМАНИЕ: Платёж и вся его история будут полностью удалены из системы. Продолжить?')">
+            <button class="ghost mini" style="color: #e53e3e; border-color: #e53e3e;">Удалить</button>
+          </form>
+        </div>
         </td>
       </tr>
       {{end}}

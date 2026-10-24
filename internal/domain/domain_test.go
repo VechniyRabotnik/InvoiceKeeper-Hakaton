@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aeza/invoice-keeper/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
 )
 
 // Ключевое правило кейса: день месяца — якорь, а не «уехавшая» дата.

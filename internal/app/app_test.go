@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aeza/invoice-keeper/internal/app"
-	"github.com/aeza/invoice-keeper/internal/domain"
-	"github.com/aeza/invoice-keeper/internal/storage"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/app"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/storage"
 )
 
 // newApp поднимает сервис на временной БД — каждый тест изолирован.

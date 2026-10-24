@@ -16,15 +16,15 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 
-	"github.com/aeza/invoice-keeper/internal/app"
-	"github.com/aeza/invoice-keeper/internal/bot"
-	"github.com/aeza/invoice-keeper/internal/config"
-	"github.com/aeza/invoice-keeper/internal/domain"
-	"github.com/aeza/invoice-keeper/internal/httpapi"
-	"github.com/aeza/invoice-keeper/internal/ratelimit"
-	"github.com/aeza/invoice-keeper/internal/session"
-	"github.com/aeza/invoice-keeper/internal/storage"
-	"github.com/aeza/invoice-keeper/internal/web"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/app"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/bot"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/config"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/httpapi"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/ratelimit"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/session"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/storage"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/web"
 )
 
 func main() {

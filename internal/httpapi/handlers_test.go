@@ -16,12 +16,12 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/aeza/invoice-keeper/internal/app"
-	"github.com/aeza/invoice-keeper/internal/domain"
-	"github.com/aeza/invoice-keeper/internal/httpapi"
-	"github.com/aeza/invoice-keeper/internal/ratelimit"
-	"github.com/aeza/invoice-keeper/internal/session"
-	"github.com/aeza/invoice-keeper/internal/storage"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/app"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/httpapi"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/ratelimit"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/session"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/storage"
 )
 
 // apiClient — минимальный HTTP-клиент поверх httptest: тесты проверяют

@@ -9,7 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
 
-	"github.com/aeza/invoice-keeper/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
 )
 
 //go:embed templates/*.html

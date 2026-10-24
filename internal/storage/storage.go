@@ -16,7 +16,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/aeza/invoice-keeper/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
 )
 
 // Store — доступ к базе. Репозиторий отдаёт доменные типы и не знает о HTTP.
@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS users (
 	login         TEXT    NOT NULL UNIQUE,
 	password_hash TEXT    NOT NULL,
 	role          TEXT    NOT NULL DEFAULT 'user',
+	tg_chat_id    TEXT    UNIQUE,
 	created_at    TEXT    NOT NULL
 );
 CREATE TABLE IF NOT EXISTS recurring_payments (
@@ -102,14 +103,28 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
 );
 `
 
-// migrate создаёт схему и доводит до неё старые базы: колонка user_id
-// появилась позже, чем сама таблица, поэтому её наличие проверяется явно.
+// migrate создаёт схему и доводит до неё старые базы: колонки user_id и
+// tg_chat_id появились позже своих таблиц, поэтому их наличие проверяется явно.
 func (s *Store) migrate() error {
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
 	}
-	return addColumnIfMissing(s.db, "recurring_payments", "user_id",
-		`ALTER TABLE recurring_payments ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`)
+	changes := []struct{ table, column, ddl string }{
+		{"recurring_payments", "user_id",
+			`ALTER TABLE recurring_payments ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`},
+		{"users", "tg_chat_id", `ALTER TABLE users ADD COLUMN tg_chat_id TEXT`},
+	}
+	for _, c := range changes {
+		if err := addColumnIfMissing(s.db, c.table, c.column, c.ddl); err != nil {
+			return err
+		}
+	}
+
+	if _, err := s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_tg_chat_id ON users(tg_chat_id) WHERE tg_chat_id IS NOT NULL`); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func columnExists(db *sql.DB, table, column string) (bool, error) {
@@ -149,15 +164,22 @@ func (s *Store) UserByID(id int64) (*domain.User, error) {
 	return s.user(`id = ?`, id)
 }
 
+// UserByChat — учётная запись, к которой привязан чат. Нужна боту, чтобы по
+// нажатию кнопки и при напоминании понимать, кто отвечает за платёж.
+func (s *Store) UserByChat(chatID string) (*domain.User, error) {
+	return s.user(`tg_chat_id = ?`, chatID)
+}
+
 func (s *Store) user(where string, arg any) (*domain.User, error) {
 	var (
 		u       domain.User
 		role    string
+		chat    sql.NullString
 		created string
 	)
 	err := s.db.QueryRow(
-		`SELECT id, login, password_hash, role, created_at FROM users WHERE `+where, arg,
-	).Scan(&u.ID, &u.Login, &u.PasswordHash, &role, &created)
+		`SELECT id, login, password_hash, role, tg_chat_id, created_at FROM users WHERE `+where, arg,
+	).Scan(&u.ID, &u.Login, &u.PasswordHash, &role, &chat, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrNotFound
 	}
@@ -165,12 +187,13 @@ func (s *Store) user(where string, arg any) (*domain.User, error) {
 		return nil, err
 	}
 	u.Role = domain.Role(role)
+	u.TGChatID = chat.String
 	u.CreatedAt, _ = time.Parse(time.RFC3339, created)
 	return &u, nil
 }
 
 func (s *Store) ListUsers() ([]domain.User, error) {
-	rows, err := s.db.Query(`SELECT id, login, role, created_at FROM users ORDER BY id`)
+	rows, err := s.db.Query(`SELECT id, login, role, tg_chat_id, created_at FROM users ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -181,12 +204,14 @@ func (s *Store) ListUsers() ([]domain.User, error) {
 		var (
 			u       domain.User
 			role    string
+			chat    sql.NullString
 			created string
 		)
-		if err := rows.Scan(&u.ID, &u.Login, &role, &created); err != nil {
+		if err := rows.Scan(&u.ID, &u.Login, &role, &chat, &created); err != nil {
 			return nil, err
 		}
 		u.Role = domain.Role(role)
+		u.TGChatID = chat.String
 		u.CreatedAt, _ = time.Parse(time.RFC3339, created)
 		out = append(out, u)
 	}
@@ -216,6 +241,14 @@ func (s *Store) DeleteUser(id int64) error {
 	return affected(res)
 }
 
+func (s *Store) DeletePayment(id int64) error {
+	res, err := s.db.Exec(`DELETE FROM recurring_payments WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	return affected(res)
+}
+
 // DemoteAdminsExcept понижает до обычных пользователей все админские записи,
 // кроме указанного логина. Вызывается при старте: администратор задаётся
 // только через .env, поэтому «осиротевшая» админская запись после смены
@@ -224,6 +257,24 @@ func (s *Store) DemoteAdminsExcept(login string) error {
 	_, err := s.db.Exec(`UPDATE users SET role = ? WHERE role = ? AND login <> ?`,
 		string(domain.RoleUser), string(domain.RoleAdmin), login)
 	return err
+}
+
+// SetUserChat закрепляет за пользователем Telegram-чат; пустая строка снимает
+// привязку. Чат уникален: один чат не может обслуживать двух пользователей,
+// иначе напоминания ушли бы не тому адресату.
+func (s *Store) SetUserChat(id int64, chatID string) error {
+	var value any
+	if chatID != "" {
+		value = chatID
+	}
+	res, err := s.db.Exec(`UPDATE users SET tg_chat_id = ? WHERE id = ?`, value, id)
+	if err != nil {
+		if uniqueViolation(err) {
+			return domain.Invalid("чат уже привязан к другому пользователю")
+		}
+		return err
+	}
+	return affected(res)
 }
 
 // ── регулярные платежи ────────────────────────────────────────────────────

@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aeza/invoice-keeper/internal/app"
-	"github.com/aeza/invoice-keeper/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/app"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
 )
 
 // Notifier доставляет сообщение о периоде в конкретный чат.
@@ -99,6 +99,7 @@ func (b *Bot) Run(stop <-chan struct{}) {
 }
 
 // Tick отправляет все накопившиеся напоминания.
+// Tick отправляет персональные напоминания подписанным чатам.
 func (b *Bot) Tick() {
 	if !b.enabled() {
 		return
@@ -114,31 +115,45 @@ func (b *Bot) Tick() {
 		return
 	}
 
-	pending, err := b.svc.PendingReminders()
-	if err != nil {
-		log.Printf("telegram: не удалось получить напоминания: %v", err)
-		return
-	}
-
 	today := b.svc.Today()
-	for _, o := range pending {
-		claimed, err := b.svc.ClaimReminder(o.ID)
+
+	// Проходим по каждому подписанному чату персонально
+	for _, chatID := range chats {
+		// Находим пользователя, привязанного к этому Telegram-чату
+		user, err := b.svc.UserByChat(chatID)
 		if err != nil {
-			log.Printf("telegram: не удалось занять напоминание %d: %v", o.ID, err)
+			// Если чат не привязан ни к какому пользователю, пропускаем его
 			continue
-		}
-		if !claimed {
-			continue // уже отправлено другим воркером
 		}
 
-		if !b.deliver(chats, o, today) {
-			log.Printf("telegram: напоминание %d не доставлено, возвращаю в очередь", o.ID)
-			if relErr := b.svc.ReleaseReminder(o.ID); relErr != nil {
-				log.Printf("telegram: не удалось вернуть напоминание %d: %v", o.ID, relErr)
-			}
+		// Получаем напоминания СТРОГО для этого пользователя
+		pending, err := b.svc.PendingRemindersForUser(user.ID)
+		if err != nil {
+			log.Printf("telegram: не удалось получить напоминания для пользователя %d (чат %s): %v", user.ID, chatID, err)
 			continue
 		}
-		log.Printf("telegram: напоминание отправлено (%s, %s)", o.PaymentName, o.DueDate)
+
+		for _, o := range pending {
+			claimed, err := b.svc.ClaimReminder(o.ID)
+			if err != nil {
+				log.Printf("telegram: не удалось занять напоминание %d: %v", o.ID, err)
+				continue
+			}
+			if !claimed {
+				continue // уже отправлено другим воркером или процессом
+			}
+
+			// Доставляем напоминание СТРОГО в этот конкретный чат
+			if err := b.notifier.Notify(chatID, o, today); err != nil {
+				log.Printf("telegram: чат %s не принял напоминание %d: %v", chatID, o.ID, err)
+				// Возвращаем в очередь, если доставка не удалась
+				if relErr := b.svc.ReleaseReminder(o.ID); relErr != nil {
+					log.Printf("telegram: не удалось вернуть напоминание %d: %v", o.ID, relErr)
+				}
+				continue
+			}
+			log.Printf("telegram: персональное напоминание отправлено в чат %s (%s, %s)", chatID, o.PaymentName, o.DueDate)
+		}
 	}
 }
 
@@ -247,7 +262,7 @@ func sleep(stop <-chan struct{}, d time.Duration) bool {
 // разрешено только подписанным чатам: иначе любой, узнавший адрес бота, мог бы
 // закрывать чужие платежи.
 func handleCallback(svc *app.App, ch Channel, u Callback) {
-	id, ok := parsePaidData(u.Data)
+	id, isUnpay, ok := parseActionData(u.Data)
 	if !ok {
 		_ = ch.Ack(u.ID, "Кнопка не распознана")
 		return
@@ -270,6 +285,27 @@ func handleCallback(svc *app.App, ch Channel, u Callback) {
 		_ = ch.Ack(u.ID, "Платёж не найден")
 		return
 	}
+
+	// Если это запрос на отмену оплаты (unpay:)
+	if isUnpay {
+		if occurrence.PaidAt == nil {
+			_ = ch.Ack(u.ID, "Платёж уже не оплачен")
+			return
+		}
+		// Передаем пустую строку, чтобы снять отметку и очистить дату в БД
+		if _, err := svc.SetPaid(id, ""); err != nil {
+			log.Printf("telegram: не удалось отменить оплату периода %d: %v", id, err)
+			_ = ch.Ack(u.ID, "Не удалось отменить оплату")
+			return
+		}
+
+		log.Printf("telegram: оплата периода %d отменена из чата %s", id, u.ChatID)
+		_ = ch.Ack(u.ID, "Оплата отменена")
+		_ = ch.ClearButtons(u.ChatID, u.MessageID)
+		return
+	}
+
+	// Штатная логика подтверждения оплаты (paid:)
 	if occurrence.PaidAt != nil {
 		_ = ch.Ack(u.ID, "Уже отмечено оплаченным")
 		return
@@ -284,7 +320,7 @@ func handleCallback(svc *app.App, ch Channel, u Callback) {
 
 	log.Printf("telegram: период %d отмечен оплаченным из чата %s", id, u.ChatID)
 	_ = ch.Ack(u.ID, "Отмечено оплаченным")
-	// Убираем кнопку, чтобы повторное нажатие не выглядело как новое действие.
+	// Убираем клавиатуру, чтобы повторное нажатие не выглядело как новое действие.
 	_ = ch.ClearButtons(u.ChatID, u.MessageID)
 }
 
@@ -294,6 +330,7 @@ func handleCommand(svc *app.App, ch Channel, cmd Command) {
 	name, _, _ = strings.Cut(name, "@")
 
 	var reply string
+	var err error
 	switch strings.ToLower(name) {
 	case "/start":
 		if err := svc.SubscribeChat(cmd.ChatID); err != nil {
@@ -312,6 +349,40 @@ func handleCommand(svc *app.App, ch Channel, cmd Command) {
 			break
 		}
 		reply = "Готово, напоминания сюда больше не приходят. Вернуться — /start."
+	case "/payments":
+		// Поддерживаем фильтр по месяцу, например: /payments 2026-11
+		_, monthArg, _ := strings.Cut(strings.TrimSpace(cmd.Text), " ")
+		var err error
+		reply, err = userPaymentsText(svc, cmd.ChatID, strings.TrimSpace(monthArg))
+		if err != nil {
+			log.Printf("telegram: ошибка получения платежей для чата %s: %v", cmd.ChatID, err)
+			reply = "Не удалось загрузить список платежей."
+		}
+	case "/pay":
+		err = sendUnpaidPaymentsList(svc, ch, cmd.ChatID)
+		if err != nil {
+			log.Printf("telegram: ошибка отправки списка для оплаты в чат %s: %v", cmd.ChatID, err)
+			_ = ch.SendText(cmd.ChatID, "Не удалось загрузить список неоплаченных платежей.")
+		}
+	case "/overdue":
+		var err error
+		reply, err = userOverdueText(svc, cmd.ChatID)
+		if err != nil {
+			log.Printf("telegram: ошибка получения просрочек для чата %s: %v", cmd.ChatID, err)
+			reply = "Не удалось загрузить список просрочек."
+		}
+	case "/unpay":
+		err = sendUnpaidListForCancel(svc, ch, cmd.ChatID)
+		if err != nil {
+			log.Printf("telegram: ошибка отправки списка для отмены в чат %s: %v", cmd.ChatID, err)
+			_ = ch.SendText(cmd.ChatID, "Не удалось загрузить список оплаченных платежей.")
+		}
+		return
+	case "/setdate":
+		reply, err = handleSetDateCommand(svc, cmd.ChatID, cmd.Text)
+		if err != nil {
+			log.Printf("telegram: ошибка смены даты для чата %s: %v", cmd.ChatID, err)
+		}
 	case "/summary":
 		text, err := summaryText(svc)
 		if err != nil {
@@ -330,11 +401,196 @@ func handleCommand(svc *app.App, ch Channel, cmd Command) {
 }
 
 func helpText() string {
-	return "Invoice Keeper. Команды:\n" +
-		"/start — получать напоминания об оплате\n" +
-		"/summary — итоги и ближайшие платежи\n" +
-		"/id — ID этого чата для TELEGRAM_CHAT_ID\n" +
-		"/unsubscribe — отключить напоминания"
+	return "🤖 Доступные команды Invoice Keeper:\n\n" +
+		"📊 Информация и отчеты:\n" +
+		"• /summary — Общие итоги и ближайшие платежи\n" +
+		"• /payments — Список ваших платежей (можно указать месяц, например: <code>/payments 2026-11</code>)\n" +
+		"• /overdue — Ваши текущие просрочки по оплате\n\n" +
+		"💳 Управление платежами:\n" +
+		"• /pay — Выбрать неоплаченный платеж и отметить его оплаченным через кнопки\n" +
+		"• /unpay — Отменить отметку об оплате (снять статус)\n" +
+		"• /setdate <code>ID дата</code> — Указать или изменить фактическую дату оплаты (например: <code>/setdate 15 2026-10-24</code>)\n\n" +
+		"⚙️ Настройка и чат:\n" +
+		"• /start — Подписаться на автоматические напоминания\n" +
+		"• /unsubscribe — Отписаться от напоминаний\n" +
+		"• /id — Узнать Telegram ID текущего чата\n" +
+		"• /help — Показать эту справку"
+}
+
+// userPaymentsText формирует список платежей пользователя с фильтрацией по месяцу (формат YYYY-MM).
+func userPaymentsText(svc *app.App, chatID string, monthFilter string) (string, error) {
+	user, err := svc.UserByChat(chatID)
+	if err != nil {
+		return "⚠️ Ваш Telegram чат не привязан ни к одному пользователю в системе. Обратитесь к администратору.", nil
+	}
+
+	// Получаем платежи, назначенные этому пользователю
+	occurrences, err := svc.OccurrencesFiltered(0, user.ID)
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	if monthFilter != "" {
+		fmt.Fprintf(&b, "📋 Платежи за период: %s\n\n", monthFilter)
+	} else {
+		b.WriteString("📋 Ваши активные и будущие платежи:\n\n")
+	}
+
+	count := 0
+
+	for _, o := range occurrences {
+		// Если задан фильтр по месяцу (например, "2026-11"), проверяем вхождение в строку даты
+		if monthFilter != "" && !strings.HasPrefix(o.DueDate.String(), monthFilter) {
+			continue
+		}
+
+		statusIcon := "⏳"
+		if o.PaidAt != nil {
+			statusIcon = "✅"
+		} else if o.Status == domain.StatusOverdue {
+			statusIcon = "🔴"
+		}
+
+		// Выводим название, сумму и ID периода в тегах тега code для удобного копирования
+		fmt.Fprintf(&b, "%s %s [ID: %d] — %s\n📅 Срок: %s",
+			statusIcon, o.PaymentName, o.ID, o.Amount.String(o.Currency), o.DueDate)
+
+		if o.PaidAt != nil {
+			fmt.Fprintf(&b, " (Оплачено: %s)", o.PaidAt)
+		}
+		b.WriteString("\n\n")
+		count++
+	}
+
+	if count == 0 {
+		return "📭 По вашему запросу платежей не найдено.", nil
+	}
+
+	return b.String(), nil
+}
+
+// userOverdueText выводит список просроченных платежей пользователя.
+func userOverdueText(svc *app.App, chatID string) (string, error) {
+	user, err := svc.UserByChat(chatID)
+	if err != nil {
+		return "⚠️ Ваш Telegram чат не привязан к учетной записи в системе.", nil
+	}
+
+	occurrences, err := svc.OccurrencesFiltered(0, user.ID)
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	b.WriteString("🔴 Ваши просроченные задолженности:\n\n")
+
+	today := svc.Today()
+	count := 0
+
+	for _, o := range occurrences {
+		// Фильтруем только просроченные и неоплаченные
+		if o.Status == domain.StatusOverdue && o.PaidAt == nil {
+			daysLate := today.DaysUntil(o.DueDate) // будет отрицательным числом
+			fmt.Fprintf(&b, "📌 %s\n💰 Сумма: %s\n⏰ Просрочено на: %d дн. (срок был %s)\n\n",
+				o.PaymentName, o.Amount.String(o.Currency), -daysLate, o.DueDate)
+			count++
+		}
+	}
+
+	if count == 0 {
+		return "🎉 У вас нет просроченных платежей. Отличная финансовая дисциплина!", nil
+	}
+
+	return b.String(), nil
+}
+
+// sendUnpaidPaymentsList находит все неоплаченные периоды пользователя и отправляет их с кнопками оплаты.
+// sendUnpaidPaymentsList формирует одно сообщение со списком неоплаченных платежей и кнопками для каждого.
+func sendUnpaidPaymentsList(svc *app.App, ch Channel, chatID string) error {
+	user, err := svc.UserByChat(chatID)
+	if err != nil {
+		return ch.SendText(chatID, "⚠️ Ваш Telegram чат не привязан ни к одному пользователю в системе.")
+	}
+
+	occurrences, err := svc.OccurrencesFiltered(0, user.ID)
+	if err != nil {
+		return err
+	}
+
+	var rows [][]map[string]string
+	var b strings.Builder
+	b.WriteString("💳 Выберите платеж для оплаты:\n\n")
+
+	count := 0
+	for _, o := range occurrences {
+		if o.PaidAt != nil {
+			continue
+		}
+
+		count++
+		// Текст в чате с общей сводкой
+		fmt.Fprintf(&b, "%d. %s — %s (Срок: %s)\n",
+			count, o.PaymentName, o.Amount.String(o.Currency), o.DueDate)
+
+		// ИСПРАВЛЕНО: Ключ для данных кнопки в Telegram API строго называется "callback_data"
+		rows = append(rows, []map[string]string{
+			{
+				"text":          fmt.Sprintf("✅ Оплатить: %s (%s)", o.PaymentName, o.Amount.String(o.Currency)),
+				"callback_data": "paid:" + strconv.FormatInt(o.ID, 10),
+			},
+		})
+
+		// Ограничим выборку первыми 5 платежами
+		if count >= 5 {
+			b.WriteString("\n… показаны первые 5 неоплаченных платежей.")
+			break
+		}
+	}
+
+	if count == 0 {
+		return ch.SendText(chatID, "🎉 У вас нет неоплаченных платежей!")
+	}
+
+	// Отправляем ОДНО сообщение со всеми кнопками
+	if tg, ok := ch.(*Telegram); ok {
+		return tg.call("sendMessage", map[string]any{
+			"chat_id":    chatID,
+			"text":       b.String(),
+			"parse_mode": "HTML",
+			"reply_markup": map[string]any{
+				"inline_keyboard": rows,
+			},
+		}, nil)
+	}
+
+	// Запасной вариант для тестов
+	return ch.SendText(chatID, b.String())
+}
+
+// sendPaymentButton отправляет сообщение с инлайн-кнопкой «Оплачено» для конкретного периода.
+func sendPaymentButton(ch Channel, chatID string, text string, occurrenceID int64) error {
+	// Поскольку стандартный интерфейс Channel содержит только SendText (без кастомных payloads),
+	// мы можем привести интерфейс к структуре Telegram, если используется реальный бот,
+	// либо расширить интерфейс Channel. Если вы работаете в рамках текущего пакета bot,
+	// можно вызвать метод напрямую через структуру Telegram или отправить через вспомогательный метод.
+
+	// Если у вас доступна структура Telegram, можно использовать ее метод вызова API:
+	if tg, ok := ch.(*Telegram); ok {
+		return tg.call("sendMessage", map[string]any{
+			"chat_id":    chatID,
+			"text":       text,
+			"parse_mode": "HTML",
+			"reply_markup": map[string]any{
+				"inline_keyboard": [][]map[string]string{{
+					{"text": "✅ Отметить оплаченным", "callback_data": "paid:" + strconv.FormatInt(occurrenceID, 10)},
+				}},
+			},
+		}, nil)
+	}
+
+	// Запасной вариант через стандартный SendText, если тип канала — тестировщик (recorder/fakeChannel)
+	return ch.SendText(chatID, text+" [Кнопка оплаты]")
 }
 
 func startText(chatID string) string {
@@ -356,36 +612,171 @@ func summaryText(svc *app.App) (string, error) {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "Итоги на %s\n", totals.Date)
-	for _, c := range totals.ByCurrency {
-		fmt.Fprintf(&b, "%s: к оплате %.2f из %.2f\n", c.Currency, c.Outstanding, c.Total)
-	}
-	fmt.Fprintf(&b, "Периодов: %d · просрочено %d · срок сегодня %d · оплачено %d",
-		totals.Status.Total, totals.Status.Overdue, totals.Status.Due, totals.Status.Paid)
+	b.WriteString("📊 Сводка по финансам и платежам\n")
+	fmt.Fprintf(&b, "📅 Актуально на: %s\n", totals.Date)
+	b.WriteString("────────────────────────\n\n")
 
+	// Блок сумм по валютам
+	b.WriteString("💰 По валютам:\n")
+	if len(totals.ByCurrency) == 0 {
+		b.WriteString("• Нет активных валют\n")
+	} else {
+		for _, c := range totals.ByCurrency {
+			fmt.Fprintf(&b, "• %s: к оплате %.2f из %.2f\n", c.Currency, c.Outstanding, c.Total)
+		}
+	}
+	b.WriteString("\n")
+
+	// Блок статистики по статусам
+	b.WriteString("📌 Состояние периодов:\n")
+	fmt.Fprintf(&b, "• Всего: %d\n", totals.Status.Total)
+	fmt.Fprintf(&b, "• 🔴 Просрочено: %d\n", totals.Status.Overdue)
+	fmt.Fprintf(&b, "• ⏳ Срок сегодня: %d\n", totals.Status.Due)
+	fmt.Fprintf(&b, "• ✅ Оплачено: %d\n\n", totals.Status.Paid)
+
+	// Блок ближайших напоминаний
 	if len(upcoming) == 0 {
-		b.WriteString("\n\nБлижайшие напоминания не требуются.")
+		b.WriteString("🎉 Ближайшие напоминания не требуются.")
 		return b.String(), nil
 	}
 
-	b.WriteString("\n\nБлижайшие:")
+	b.WriteString("⏰ Ближайшие платежи:")
 	today := svc.Today()
-	for i, o := range upcoming {
-		if i == 5 {
-			fmt.Fprintf(&b, "\n… и ещё %d", len(upcoming)-i)
+	count := 0
+	for _, o := range upcoming {
+		if count >= 5 {
+			fmt.Fprintf(&b, "\n\n<i>… и ещё %d платежей</i>", len(upcoming)-count)
 			break
 		}
-		fmt.Fprintf(&b, "\n· %s — %s, %s", o.PaymentName, o.Amount.String(o.Currency), o.DueDate)
+		count++
+
+		statusIcon := "⏳"
+		if o.Status == domain.StatusOverdue {
+			statusIcon = "🔴"
+		}
+
+		fmt.Fprintf(&b, "\n%s %s — %s\n   📅 Срок: %s",
+			statusIcon, o.PaymentName, o.Amount.String(o.Currency), o.DueDate)
+
 		switch left := today.DaysUntil(o.DueDate); {
 		case left < 0:
-			fmt.Fprintf(&b, " (просрочен на %d дн.)", -left)
+			fmt.Fprintf(&b, " (⚠️ просрочен на %d дн.)", -left)
 		case left == 0:
-			b.WriteString(" (сегодня)")
+			b.WriteString(" (🔥 сегодня!)")
 		default:
 			fmt.Fprintf(&b, " (через %d дн.)", left)
 		}
 	}
+
 	return b.String(), nil
+}
+
+// parseActionData разбирает "paid:42" или "unpay:42".
+func parseActionData(data string) (int64, bool, bool) {
+	if raw, ok := strings.CutPrefix(data, "paid:"); ok {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err == nil && id > 0 {
+			return id, false, true
+		}
+	}
+	if raw, ok := strings.CutPrefix(data, "unpay:"); ok {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err == nil && id > 0 {
+			return id, true, true
+		}
+	}
+	return 0, false, false
+}
+
+// sendUnpaidListForCancel выводит список уже оплаченных платежей с кнопкой отмены.
+func sendUnpaidListForCancel(svc *app.App, ch Channel, chatID string) error {
+	user, err := svc.UserByChat(chatID)
+	if err != nil {
+		return ch.SendText(chatID, "⚠️ Ваш Telegram чат не привязан ни к одному пользователю в системе.")
+	}
+
+	occurrences, err := svc.OccurrencesFiltered(0, user.ID)
+	if err != nil {
+		return err
+	}
+
+	var rows [][]map[string]string
+	var b strings.Builder
+	b.WriteString("↩️ Выберите платеж для отмены оплаты:\n\n")
+
+	count := 0
+	for _, o := range occurrences {
+		if o.PaidAt == nil {
+			continue // Показываем только те, которые оплачены
+		}
+
+		count++
+		fmt.Fprintf(&b, "%d. %s — %s (Оплачено: %s)\n",
+			count, o.PaymentName, o.Amount.String(o.Currency), o.PaidAt)
+
+		rows = append(rows, []map[string]string{
+			{
+				"text":          fmt.Sprintf("❌ Отменить оплату: %s", o.PaymentName),
+				"callback_data": "unpay:" + strconv.FormatInt(o.ID, 10),
+			},
+		})
+
+		if count >= 5 {
+			break
+		}
+	}
+
+	if count == 0 {
+		return ch.SendText(chatID, "📭 У вас нет оплаченных платежей, отметку которых можно снять.")
+	}
+
+	if tg, ok := ch.(*Telegram); ok {
+		return tg.call("sendMessage", map[string]any{
+			"chat_id":    chatID,
+			"text":       b.String(),
+			"parse_mode": "HTML",
+			"reply_markup": map[string]any{
+				"inline_keyboard": rows,
+			},
+		}, nil)
+	}
+
+	return ch.SendText(chatID, b.String())
+}
+
+// handleSetDateCommand обрабатывает команду /setdate ID ГГГГ-ММ-ДД
+func handleSetDateCommand(svc *app.App, chatID string, text string) (string, error) {
+	// Проверяем, что чат привязан к учетной записи
+	if _, err := svc.UserByChat(chatID); err != nil {
+		return "⚠️ Ваш Telegram чат не привязан к учетной записи.", nil
+	}
+
+	parts := strings.Fields(text)
+	if len(parts) < 3 {
+		return "⚠️ Неверный формат. Используйте команду так:\n<code>/setdate ID 2026-10-24</code>\n(ID периода можно узнать через /payments)", nil
+	}
+
+	occurrenceID, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return "⚠️ Некорректный ID периода.", nil
+	}
+
+	newDateStr := parts[2]
+
+	// Проверяем существование периода
+	occurrence, err := svc.Occurrence(occurrenceID)
+	if err != nil {
+		return "⚠️ Период с таким ID не найден.", nil
+	}
+
+	// Устанавливаем новую фактическую дату оплаты (это автоматически убирает ошибочную просрочку)[cite: 5]
+	_, err = svc.SetPaid(occurrenceID, newDateStr)
+	if err != nil {
+		return fmt.Sprintf("⚠️ Ошибка установки даты: %v", err), nil
+	}
+
+	return fmt.Sprintf("✅ Дата оплаты для платежа %s успешно изменена на %s. Ошибочная просрочка пересчитана.",
+		occurrence.PaymentName, newDateStr), nil
 }
 
 // parsePaidData разбирает callback_data вида "paid:42".

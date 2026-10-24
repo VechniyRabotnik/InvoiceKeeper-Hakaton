@@ -1,4 +1,4 @@
-module github.com/aeza/invoice-keeper
+module github.com/VechniyRabotnik/InvoiceKeeper-Hakaton
 
 go 1.25
 

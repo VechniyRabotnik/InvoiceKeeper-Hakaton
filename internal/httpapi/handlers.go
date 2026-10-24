@@ -13,10 +13,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/aeza/invoice-keeper/internal/app"
-	"github.com/aeza/invoice-keeper/internal/domain"
-	"github.com/aeza/invoice-keeper/internal/ratelimit"
-	"github.com/aeza/invoice-keeper/internal/session"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/app"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/domain"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/ratelimit"
+	"github.com/VechniyRabotnik/InvoiceKeeper-Hakaton/internal/session"
 )
 
 // ── Контекст и guard-ы ────────────────────────────────────────────────────
@@ -361,6 +361,20 @@ func (h *Handler) ResumePayment(c *fiber.Ctx) error {
 	return c.JSON(p)
 }
 
+// DeletePayment POST /payments/:id/delete
+func (h *Handler) DeletePayment(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("id")
+	if err != nil {
+		return h.fail(c, http.StatusBadRequest, "некорректный id платежа")
+	}
+
+	if err := h.svc.DeletePayment(int64(id)); err != nil {
+		return h.failErr(c, err)
+	}
+
+	return c.SendStatus(http.StatusNoContent)
+}
+
 // StopPayment DELETE /api/v1/recurring-payments/{id}
 func (h *Handler) StopPayment(c *fiber.Ctx) error {
 	id, ok := h.pathID(c)
@@ -536,7 +550,7 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return h.fail(c, http.StatusBadRequest, "некорректное тело запроса")
 	}
-	u, err := h.svc.CreateUser(req.Login, req.Password)
+	u, err := h.svc.CreateUser(req.Login)
 	if err != nil {
 		return h.failErr(c, err)
 	}
@@ -545,15 +559,17 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 
 // UpdateUser PATCH /api/v1/users/{id}
 func (h *Handler) UpdateUser(c *fiber.Ctx) error {
-	id, ok := h.pathID(c)
-	if !ok {
-		return nil
+	id, err := c.ParamsInt("id")
+	if err != nil {
+		return h.fail(c, http.StatusBadRequest, "некорректный id пользователя")
 	}
+
 	var req userRequest
 	if err := c.BodyParser(&req); err != nil {
 		return h.fail(c, http.StatusBadRequest, "некорректное тело запроса")
 	}
-	u, err := h.svc.UpdateUser(id, req.Login, req.Password)
+
+	u, err := h.svc.UpdateUser(int64(id), req.Login)
 	if err != nil {
 		return h.failErr(c, err)
 	}
