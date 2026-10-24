@@ -112,24 +112,27 @@ func (a *App) DeletePayment(id int64) error {
 
 // ── доступ ────────────────────────────────────────────────────────────────
 
-// Authenticate проверяет учетные данные пользователя или администратора
+// Authenticate проверяет пару логин/пароль и возвращает учётную запись.
+// Одинаковая ошибка для «нет такого логина» и «неверный пароль» не даёт
+// проверить существование аккаунта.
 func (a *App) Authenticate(login, password string) (*domain.User, error) {
+	const bad = "неверный логин или пароль"
+
 	if strings.TrimSpace(login) == "" || strings.TrimSpace(password) == "" {
-		return nil, fmt.Errorf("укажите логин и пароль")
+		return nil, errors.New(bad)
 	}
 
-	// Ищем пользователя по логину в базе данных
-	user, err := a.store.UserByLogin(login)
+	u, err := a.store.UserByLogin(login)
 	if err != nil {
-		return nil, fmt.Errorf("неверный логин или пароль")
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, errors.New(bad)
+		}
+		return nil, err
 	}
-
-	// Сверяем пароль через bcrypt с хэшем в базе
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		return nil, fmt.Errorf("неверный логин или пароль")
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
+		return nil, errors.New(bad)
 	}
-
-	return user, nil
+	return u, nil
 }
 
 // RevokeSession вносит сессию в чёрный список: logout делает выданный токен
@@ -144,45 +147,27 @@ func (a *App) SessionRevoked(jti string) (bool, error) {
 }
 
 // ── пользователи ──────────────────────────────────────────────────────────
-// unusableHash — заведомо неверный хеш для обычных пользователей, у которых нет доступа к панели.
-const unusableHash = "$2a$10$UnusableHashForRegularUsersWithoutPanelAccess000000000000000"
 
-// CreateUser создаёт обычного пользователя. Пароль не задается: у обычной
-// учётной записи нет доступа к панели, весь её контакт с системой — Telegram
-// по закреплённому чату. Поэтому в базе остаётся заведомо неверный хеш.
-func (a *App) CreateUser(login string) (*domain.User, error) {
-	if len(login) < 3 {
-		return nil, domain.Invalid("login must be at least 3 characters")
+// CreateUser создаёт обычного пользователя с паролем для входа в панель.
+// Роль всегда user: администратор задаётся только через .env.
+func (a *App) CreateUser(login, password string) (*domain.User, error) {
+	login = strings.TrimSpace(login)
+	if err := validateCredentials(login, password); err != nil {
+		return nil, err
 	}
-	id, err := a.store.CreateUser(login, unusableHash, string(domain.RoleUser))
+	if password == "" {
+		return nil, domain.Invalid("password is required")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash user password: %w", err)
+	}
+	id, err := a.store.CreateUser(login, string(hash), string(domain.RoleUser))
 	if err != nil {
 		return nil, err
 	}
 	return a.store.UserByID(id)
-}
-
-// CreateUserWithPassword — корректное создание пользователя с хэшированием пароля
-func (a *App) CreateUserWithPassword(login, password string) (*domain.User, error) {
-	if strings.TrimSpace(login) == "" {
-		return nil, domain.Invalid("логин не может быть пустым")
-	}
-	if len(password) < 4 {
-		return nil, domain.Invalid("пароль должен быть не менее 4 символов")
-	}
-
-	// Обязательно генерируем bcrypt-хэш для пароля обычного пользователя!
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
-
-	// Сохраняем пользователя с реальным хэшем в базе
-	userID, err := a.store.CreateUser(login, string(hash), string(domain.RoleUser))
-	if err != nil {
-		return nil, err
-	}
-
-	return a.store.UserByID(userID)
 }
 
 func (a *App) Users() ([]domain.User, error) { return a.store.ListUsers() }
@@ -197,9 +182,9 @@ func (a *App) UserByChat(chatID string) (*domain.User, error) {
 	return a.store.UserByChat(chatID)
 }
 
-// UpdateUser меняет логин; пустое значение означает «не менять». Учётная
-// запись администратора защищена: она управляется только через .env.
-func (a *App) UpdateUser(id int64, login string) (*domain.User, error) {
+// UpdateUser меняет логин и/или пароль; пустые значения означают «не менять».
+// Учётная запись администратора защищена: она управляется только через .env.
+func (a *App) UpdateUser(id int64, login, password string) (*domain.User, error) {
 	target, err := a.store.UserByID(id)
 	if err != nil {
 		return nil, err
@@ -207,13 +192,27 @@ func (a *App) UpdateUser(id int64, login string) (*domain.User, error) {
 	if target.IsAdmin() {
 		return nil, domain.Invalid("учётная запись администратора управляется через .env")
 	}
-	if login == "" || login == target.Login {
+
+	login = strings.TrimSpace(login)
+	if login == "" {
+		login = target.Login
+	}
+	if err := validateCredentials(login, password); err != nil {
+		return nil, err
+	}
+	if login == target.Login && password == "" {
 		return target, nil
 	}
-	if len(login) < 3 {
-		return nil, domain.Invalid("login must be at least 3 characters")
+
+	hash := ""
+	if password != "" {
+		raw, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, fmt.Errorf("hash user password: %w", err)
+		}
+		hash = string(raw)
 	}
-	if err := a.store.UpdateUser(id, login, ""); err != nil {
+	if err := a.store.UpdateUser(id, login, hash); err != nil {
 		return nil, err
 	}
 	return a.store.UserByID(id)
@@ -232,11 +231,13 @@ func (a *App) DeleteUser(id int64) error {
 }
 
 // validateCredentials — общие правила логина и пароля для создания и смены.
+// Пустой пароль при смене допустим: он означает «оставить прежний», поэтому
+// обязательность пароля проверяет вызывающая сторона.
 func validateCredentials(login, password string) error {
-	if login != "" && len(login) < 3 {
+	if len(login) < 3 {
 		return domain.Invalid("login must be at least 3 characters")
 	}
-	if len(password) < 6 {
+	if password != "" && len(password) < 6 {
 		return domain.Invalid("password must be at least 6 characters")
 	}
 	return nil
@@ -829,36 +830,6 @@ func (a *App) PendingReminders() ([]domain.Occurrence, error) {
 			continue // дубль
 		case o.DueDate.After(limit):
 			continue // слишком рано
-		}
-		out = append(out, o)
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].DueDate.Before(out[j].DueDate) })
-	return out, nil
-}
-
-// PendingRemindersForUser возвращает напоминания строго для указанного пользователя.
-func (a *App) PendingRemindersForUser(userID int64) ([]domain.Occurrence, error) {
-	limit := a.Today().AddDays(ReminderLeadDays)
-
-	// Получаем периоды, отфильтрованные по ID пользователя
-	list, err := a.store.ListOccurrencesFiltered(0, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]domain.Occurrence, 0, len(list))
-	today := a.Today()
-	for _, o := range list {
-		o.ResolveStatus(today)
-		switch {
-		case !o.Active:
-			continue
-		case !o.Unpaid():
-			continue
-		case o.ReminderSent:
-			continue
-		case o.DueDate.After(limit):
-			continue
 		}
 		out = append(out, o)
 	}

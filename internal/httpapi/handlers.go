@@ -550,7 +550,7 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return h.fail(c, http.StatusBadRequest, "некорректное тело запроса")
 	}
-	u, err := h.svc.CreateUser(req.Login)
+	u, err := h.svc.CreateUser(req.Login, req.Password)
 	if err != nil {
 		return h.failErr(c, err)
 	}
@@ -569,7 +569,7 @@ func (h *Handler) UpdateUser(c *fiber.Ctx) error {
 		return h.fail(c, http.StatusBadRequest, "некорректное тело запроса")
 	}
 
-	u, err := h.svc.UpdateUser(int64(id), req.Login)
+	u, err := h.svc.UpdateUser(int64(id), req.Login, req.Password)
 	if err != nil {
 		return h.failErr(c, err)
 	}

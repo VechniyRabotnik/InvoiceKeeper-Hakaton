@@ -5,130 +5,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PayDay · Регулярные платежи</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg-page: #f4f1f8;
-      --card-dark: #191a1e;
-      --card-light: #ffffff;
-      --accent-purple: #c4b5fd;
-      --accent-purple-hover: #b4a2f5;
-      --text-dark: #111215;
-      --text-muted: #828796;
-      --border-color: #e5e0ef;
-      --border-dark: #292a30;
-      --danger: #ff6b5b;
-      --success: #3fb950;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
-      background-color: var(--bg-page);
-      color: var(--text-dark);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      padding: 24px 36px 48px;
-    }
-
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 28px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 600;
-      font-size: 18px;
-      color: var(--text-dark);
-      text-decoration: none;
-    }
-
-    .brand-icon {
-      width: 32px; height: 32px; background: #17181c; color: #fff; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold;
-    }
-
-    .nav-pills {
-      display: flex; align-items: center; background: #17181c; padding: 5px; border-radius: 99px; gap: 3px;
-    }
-    .nav-pills a {
-      color: #8c92a2; text-decoration: none; padding: 7px 18px; font-size: 13px; font-weight: 500; border-radius: 99px; transition: all 0.2s;
-    }
-    .nav-pills a.active, .nav-pills a:hover { color: #111; background: var(--accent-purple); }
-
-    .user-profile { display: flex; align-items: center; gap: 14px; }
-    .user-badge-pill {
-      background: #ece7f8; border: 1px solid #dcd1f5; padding: 6px 14px; border-radius: 99px; display: flex; align-items: center; gap: 8px; font-size: 13px;
-    }
-    .user-badge-pill b {
-      background: #c4b5fd; color: #2b1f5c; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px;
-    }
-    .btn-logout { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; padding: 6px; }
-    .btn-logout:hover { color: var(--danger); }
-
-    .page-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-    .page-title { font-size: 38px; font-weight: 600; letter-spacing: -1px; }
-
-    .top-actions { display: flex; gap: 10px; align-items: center; }
-    .btn-icon-ghost {
-      background: #ffffff; border: 1px solid var(--border-color); width: 42px; height: 42px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center; cursor: pointer;
-    }
-    .btn-primary-pill {
-      background: #ffffff; color: #111; border: 1px solid var(--border-color); padding: 10px 20px; border-radius: 99px;
-      font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
-    }
-    .btn-primary-pill:hover { background: #faf8fc; }
-
-    .top-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-    .stat-box {
-      background: var(--card-light); border-radius: 22px; padding: 20px 24px; border: 1px solid rgba(228, 220, 242, 0.8);
-      box-shadow: 0 4px 16px rgba(0,0,0,0.015); display: flex; flex-direction: column; justify-content: space-between;
-    }
-    .stat-header { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-bottom: 12px; }
-    .stat-amount { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; margin-bottom: 4px; }
-    .stat-subtext { font-size: 12px; color: var(--text-muted); }
-
-    .dark-card { background: var(--card-dark); color: #ffffff; border-radius: 26px; padding: 24px; box-shadow: 0 16px 40px rgba(0,0,0,0.12); }
-    .dark-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-    .dark-card-title { font-size: 18px; font-weight: 500; }
-
-    .filter-tabs-group { display: flex; background: rgba(255, 255, 255, 0.06); padding: 4px; border-radius: 99px; gap: 4px; align-items: center; }
-    .filter-tabs-group a {
-      color: #9ca1b0; text-decoration: none; padding: 6px 14px; border-radius: 99px; font-size: 12.5px; font-weight: 500;
-    }
-    .filter-tabs-group a.active { background: rgba(255, 255, 255, 0.15); color: #fff; }
-
-    .payday-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .payday-table th { text-align: left; font-size: 11.5px; color: #7b8192; font-weight: 500; padding: 10px 14px; border-bottom: 1px solid var(--border-dark); text-transform: uppercase; }
-    .payday-table td { padding: 16px 14px; border-bottom: 1px solid var(--border-dark); vertical-align: middle; }
-
-    .currency-badge-icon {
-      width: 36px; height: 36px; background: rgba(255,255,255,0.08); border-radius: 10px;
-      display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px;
-    }
-    .badge-pill-gray {
-      display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.08); padding: 5px 12px; border-radius: 99px; font-size: 12px; color: #c0b2fc;
-    }
-    .btn-trash { background: none; border: none; color: #7b8192; cursor: pointer; padding: 6px; border-radius: 8px; }
-    .btn-trash:hover { color: var(--danger); background: rgba(255,107,91,0.1); }
-
-    .modal-card { background: var(--card-light); border-radius: 22px; padding: 24px; border: 1px solid rgba(228, 220, 242, 0.8); margin-bottom: 24px; }
-    input, select { background: #f7f4fc; border: 1px solid var(--border-color); color: var(--text-dark); border-radius: 12px; padding: 10px 14px; font-size: 14px; width: 100%; outline: none; }
-    
-    #settings-modal {
-      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center;
-    }
-    .modal-box { background: #fff; padding: 30px; border-radius: 24px; width: 400px; color: #111; }
-  </style>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body class="page-payments">
 
   <header>
     <a href="/" class="brand">
@@ -166,7 +45,8 @@
       </div>
     </div>
 
-    {{template "flash" .}}
+    {{if .Error}}<div class="flash">{{.Error}}</div>{{end}}
+    {{if .Notice}}<div class="flash ok">{{.Notice}}</div>{{end}}
 
     <!-- Модальное окно настроек сортировки -->
     <div id="settings-modal">
@@ -300,7 +180,7 @@
                 </form>
                 {{else}}
                 <form method="post" action="/payments/{{.ID}}/resume" style="margin:0">
-                  <button type="submit" style="background:#3fb950; color:#fff; border:none; padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">Восстановить</button>
+                  <button type="submit" style="background:#3fb950; color:#fff; border:none; padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">Возобновить</button>
                 </form>
                 {{end}}
               </div>
@@ -326,17 +206,13 @@
 <head>
   <meta charset="utf-8">
   <title>PayDay · Редактирование шаблона</title>
-  <style>
-    body { font-family: -apple-system, sans-serif; background: #f4f1f8; padding: 40px; color: #111; }
-    .card { background: #fff; padding: 30px; border-radius: 20px; max-width: 600px; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
-    input, select { width: 100%; padding: 10px; margin: 8px 0 16px; border-radius: 8px; border: 1px solid #ddd; }
-    button { background: #c4b5fd; border: none; padding: 12px 20px; font-weight: bold; border-radius: 8px; cursor: pointer; }
-  </style>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body class="page-payment-edit">
   <div class="card">
     <h2>Изменение платежа «{{.Payment.Name}}»</h2>
-    {{template "flash" .}}
+    {{if .Error}}<div class="flash">{{.Error}}</div>{{end}}
+    {{if .Notice}}<div class="flash ok">{{.Notice}}</div>{{end}}
     <form method="post" action="/payments/{{.Payment.ID}}">
       <label>Название</label>
       <input name="name" value="{{.Payment.Name}}" required>

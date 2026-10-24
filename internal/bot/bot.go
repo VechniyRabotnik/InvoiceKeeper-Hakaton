@@ -99,7 +99,6 @@ func (b *Bot) Run(stop <-chan struct{}) {
 }
 
 // Tick отправляет все накопившиеся напоминания.
-// Tick отправляет персональные напоминания подписанным чатам.
 func (b *Bot) Tick() {
 	if !b.enabled() {
 		return
@@ -115,45 +114,31 @@ func (b *Bot) Tick() {
 		return
 	}
 
+	pending, err := b.svc.PendingReminders()
+	if err != nil {
+		log.Printf("telegram: не удалось получить напоминания: %v", err)
+		return
+	}
+
 	today := b.svc.Today()
-
-	// Проходим по каждому подписанному чату персонально
-	for _, chatID := range chats {
-		// Находим пользователя, привязанного к этому Telegram-чату
-		user, err := b.svc.UserByChat(chatID)
+	for _, o := range pending {
+		claimed, err := b.svc.ClaimReminder(o.ID)
 		if err != nil {
-			// Если чат не привязан ни к какому пользователю, пропускаем его
+			log.Printf("telegram: не удалось занять напоминание %d: %v", o.ID, err)
 			continue
 		}
+		if !claimed {
+			continue // уже отправлено другим воркером
+		}
 
-		// Получаем напоминания СТРОГО для этого пользователя
-		pending, err := b.svc.PendingRemindersForUser(user.ID)
-		if err != nil {
-			log.Printf("telegram: не удалось получить напоминания для пользователя %d (чат %s): %v", user.ID, chatID, err)
+		if !b.deliver(chats, o, today) {
+			log.Printf("telegram: напоминание %d не доставлено, возвращаю в очередь", o.ID)
+			if relErr := b.svc.ReleaseReminder(o.ID); relErr != nil {
+				log.Printf("telegram: не удалось вернуть напоминание %d: %v", o.ID, relErr)
+			}
 			continue
 		}
-
-		for _, o := range pending {
-			claimed, err := b.svc.ClaimReminder(o.ID)
-			if err != nil {
-				log.Printf("telegram: не удалось занять напоминание %d: %v", o.ID, err)
-				continue
-			}
-			if !claimed {
-				continue // уже отправлено другим воркером или процессом
-			}
-
-			// Доставляем напоминание СТРОГО в этот конкретный чат
-			if err := b.notifier.Notify(chatID, o, today); err != nil {
-				log.Printf("telegram: чат %s не принял напоминание %d: %v", chatID, o.ID, err)
-				// Возвращаем в очередь, если доставка не удалась
-				if relErr := b.svc.ReleaseReminder(o.ID); relErr != nil {
-					log.Printf("telegram: не удалось вернуть напоминание %d: %v", o.ID, relErr)
-				}
-				continue
-			}
-			log.Printf("telegram: персональное напоминание отправлено в чат %s (%s, %s)", chatID, o.PaymentName, o.DueDate)
-		}
+		log.Printf("telegram: напоминание отправлено (%s, %s)", o.PaymentName, o.DueDate)
 	}
 }
 
@@ -615,7 +600,6 @@ func startText(chatID string) string {
 }
 
 // summaryText — сводка по всем платежам: итоги по валютам и ближайшие сроки.
-// summaryText — сводка по всем платежам: итоги по валютам и ближайшие сроки.
 func summaryText(svc *app.App, dateArg string) (string, error) {
 	targetDate := strings.TrimSpace(dateArg)
 
@@ -639,7 +623,7 @@ func summaryText(svc *app.App, dateArg string) (string, error) {
 
 	var b strings.Builder
 	b.WriteString("📊 Сводка по финансам и платежам\n")
-	fmt.Fprintf(&b, "📅 Актуально на: %s\n", totals.Date)
+	fmt.Fprintf(&b, "📅 Итоги на %s\n", totals.Date)
 	b.WriteString("────────────────────────\n\n")
 
 	// Блок сумм по валютам

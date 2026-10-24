@@ -174,7 +174,7 @@ func TestLoginPageIsPublic(t *testing.T) {
 		t.Fatalf("GET /login: код %d", resp.StatusCode)
 	}
 	body := readBody(t, resp)
-	if !strings.Contains(body, "Invoice Keeper") {
+	if !strings.Contains(body, `name="password"`) {
 		t.Error("страница входа не отрендерена")
 	}
 }
@@ -960,6 +960,29 @@ func TestTemplatesAreEmbedded(t *testing.T) {
 		if err := engine.Render(io.Discard, name, map[string]any{}); err != nil &&
 			strings.Contains(err.Error(), "does not exist") {
 			t.Errorf("шаблон %s не встроен: %v", name, err)
+		}
+	}
+}
+
+// Персональные страницы доступны обычному пользователю, а администратор
+// с них уходит на дашборд: без актуальной учётки оба редиректили на вход.
+func TestPersonalPagesForUser(t *testing.T) {
+	server, _ := newApp(t)
+	admin := login(t, server, "admin", "admin123")
+	createUser(t, server, admin, "ivan", "ivan1234")
+	cookie := login(t, server, "ivan", "ivan1234")
+
+	for _, path := range []string{"/calendar", "/budget"} {
+		resp := do(t, server, http.MethodGet, path, nil, cookie)
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("GET %s для пользователя: код %d, ожидался 200", path, resp.StatusCode)
+		}
+	}
+
+	for _, path := range []string{"/calendar", "/budget"} {
+		resp := do(t, server, http.MethodGet, path, nil, admin)
+		if resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != "/" {
+			t.Errorf("GET %s для админа: код %d, редирект %q", path, resp.StatusCode, resp.Header.Get("Location"))
 		}
 	}
 }

@@ -6,7 +6,7 @@
 // валидной сессии редиректит на вход.
 //
 // Разметка разделена по страницам (templates/*.html), оформление живёт в
-// static/style.css, общий каркас — в layout.html.
+// static/style.css и ограничено классом .page-* на <body> каждой страницы.
 package web
 
 import (
@@ -500,13 +500,12 @@ func dashboardRedirect(c *fiber.Ctx, query string) error {
 }
 
 // Dashboard GET /
-// Dashboard GET /
 func (h *Handler) Dashboard(c *fiber.Ctx) error {
 	filter, owner := parseOwner(c.Query("owner"))
 
 	sortParam := c.Query("sort", "date_asc")
 	rangeParam := c.Query("range", "all")
-	statusParam := c.Query("status", "all") // <--- Новый параметр фильтрации по статусу
+	statusParam := c.Query("status", "all")
 	selectID, _ := strconv.ParseInt(c.Query("select"), 10, 64)
 
 	occurrences, err := h.occurrences(filter)
@@ -602,7 +601,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		"Owner":              owner,
 		"Sort":               sortParam,
 		"Range":              rangeParam,
-		"Status":             statusParam, // <--- Передаем статус в шаблон
+		"Status":             statusParam,
 		"SelectedID":         selectID,
 		"SelectedOccurrence": selectedView,
 		"OwnerQuery":         ownerParam(c.Query("owner")),
@@ -686,7 +685,7 @@ func (h *Handler) AssignOccurrenceOwner(c *fiber.Ctx) error {
 // PaymentsPage GET /payments
 // PaymentsPage GET /payments
 func (h *Handler) PaymentsPage(c *fiber.Ctx) error {
-	tab := c.Query("tab", "active") // active, deleted, all
+	tab := c.Query("tab", "all") // active, deleted, all
 	searchQuery := strings.TrimSpace(c.Query("q"))
 	sortParam := c.Query("sort", "created_desc") // по умолчанию
 
@@ -858,14 +857,15 @@ func (h *Handler) BudgetPage(c *fiber.Ctx) error {
 	})
 }
 
-// getCurrentUser достает текущего авторизованного пользователя из контекста Fiber или сессии
+// getCurrentUser возвращает учётную запись текущего посетителя. Роль
+// читается из базы, а не из cookie: так отозванная сессия и смена роли
+// применяются сразу же, на следующем запросе.
 func (h *Handler) getCurrentUser(c *fiber.Ctx) (*domain.User, error) {
-	// Если пользователь сохраняется в c.Locals вашим middleware авторизации:
-	if user, ok := c.Locals("user").(*domain.User); ok && user != nil {
-		return user, nil
+	claims, ok := c.Locals("claims").(*session.Claims)
+	if !ok || claims == nil {
+		return nil, domain.ErrNotFound
 	}
-
-	return nil, domain.ErrNotFound
+	return h.svc.User(claims.UserID)
 }
 
 // PaymentEditPage GET /payments/:id/edit
@@ -1006,44 +1006,14 @@ func (h *Handler) UsersPage(c *fiber.Ctx) error {
 }
 
 // CreateUser POST /users
-// CreateUser POST /users
 func (h *Handler) CreateUser(c *fiber.Ctx) error {
 	login := strings.TrimSpace(c.FormValue("login"))
 	password := strings.TrimSpace(c.FormValue("password"))
 
-	if _, err := h.svc.CreateUserWithPassword(login, password); err != nil {
+	if _, err := h.svc.CreateUser(login, password); err != nil {
 		return h.badRequest(c, err)
 	}
 	return usersRedirect(c, "Пользователь «"+login+"» успешно создан")
-}
-
-// LoginPost POST /login
-// LoginPost POST /login
-func (h *Handler) LoginPost(c *fiber.Ctx) error {
-	login := strings.TrimSpace(c.FormValue("login"))
-	password := c.FormValue("password")
-
-	// Вызываем метод аутентификации из сервиса приложения
-	user, err := h.svc.Authenticate(login, password)
-	if err != nil {
-		return c.Render("login", fiber.Map{
-			"Error": "Неверный логин или пароль",
-			"Login": login,
-		})
-	}
-
-	// Если сессии в проекте реализованы через куки или fiber-сессии,
-	// сохраняем данные пользователя (например, через h.sessions или стандартные cookies Fiber):
-	c.Cookie(&fiber.Cookie{
-		Name:  "user_id",
-		Value: fmt.Sprintf("%d", user.ID),
-	})
-	c.Cookie(&fiber.Cookie{
-		Name:  "user_login",
-		Value: user.Login,
-	})
-
-	return c.Redirect("/", http.StatusFound)
 }
 
 // UpdateUser POST /users/:id
@@ -1052,7 +1022,9 @@ func (h *Handler) UpdateUser(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	updated, err := h.svc.UpdateUser(id, strings.TrimSpace(c.FormValue("login")))
+	updated, err := h.svc.UpdateUser(id,
+		strings.TrimSpace(c.FormValue("login")),
+		strings.TrimSpace(c.FormValue("password")))
 	if err != nil {
 		return h.badRequest(c, err)
 	}
