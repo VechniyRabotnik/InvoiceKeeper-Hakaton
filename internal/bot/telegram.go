@@ -167,6 +167,7 @@ func (t *Telegram) RegisterCommands() error {
 			{"command": "calendar", "description": "Календарь оплат на месяц (можно указать месяц, напр: /calendar 2026-11)"},
 			{"command": "budget", "description": "Плановый бюджет на месяц или год"},
 			{"command": "id", "description": "ID этого чата"},
+			{"command": "notifications", "description": "Посмотреть активные уведомления и просрочки"},
 			{"command": "unsubscribe", "description": "Отключить напоминания"},
 			{"command": "help", "description": "Список команд"},
 		},

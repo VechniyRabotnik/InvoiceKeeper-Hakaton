@@ -380,7 +380,12 @@ func handleCommand(svc *app.App, ch Channel, cmd Command) {
 			log.Printf("telegram: ошибка генерации календаря для чата %s: %v", cmd.ChatID, err)
 			reply = "Не удалось сформировать календарь оплат."
 		}
-
+	case "/notifications", "/notices", "/уведомления":
+		reply, err = handleNotificationsCommand(svc, cmd.ChatID)
+		if err != nil {
+			log.Printf("telegram: ошибка получения уведомлений для чата %s: %v", cmd.ChatID, err)
+			reply = "Не удалось загрузить уведомления."
+		}
 	case "/summary":
 		_, dateArg, _ := strings.Cut(strings.TrimSpace(cmd.Text), " ")
 		text, err := summaryText(svc, dateArg)
@@ -411,6 +416,7 @@ func helpText() string {
 		"• /setdate ID дата — Указать или изменить фактическую дату оплаты (например: /setdate 15 2026-10-24)\n\n" +
 		"⚙️ Настройка и чат:\n" +
 		"• /start — Подписаться на автоматические напоминания\n" +
+		"• /notifications — Посмотреть срочные уведомления и просрочки\n" +
 		"• /unsubscribe — Отписаться от напоминаний\n" +
 		"• /id — Узнать Telegram ID текущего чата\n" +
 		"• /help — Показать эту справку"
@@ -596,6 +602,61 @@ func startText(chatID string) string {
 	return "Готово, напоминания включены.\n\n" +
 		"ID этого чата: " + chatID + "\n" +
 		helpText()
+}
+
+// handleNotificationsCommand формирует список активных уведомлений (просрочки и горящие за 3 дня)
+func handleNotificationsCommand(svc *app.App, chatID string) (string, error) {
+	user, err := svc.UserByChat(chatID)
+	if err != nil {
+		return "⚠️ Ваш Telegram чат не привязан к учетной записи.", nil
+	}
+
+	occurrences, err := svc.OccurrencesFiltered(0, user.ID)
+	if err != nil {
+		return "", err
+	}
+
+	today := svc.Today()
+	var b strings.Builder
+	b.WriteString("🔔 Ваши актуальные уведомления:\n\n")
+
+	count := 0
+	for _, o := range occurrences {
+		if o.PaidAt != nil {
+			continue // Оплаченные пропускаем
+		}
+
+		daysUntil := today.DaysUntil(o.DueDate) // отрицательное — просрочка, 0, 1, 2, 3 — скоро срок
+
+		isOverdue := o.Status == domain.StatusOverdue || daysUntil < 0
+		isSoon := daysUntil >= 0 && daysUntil <= 3
+
+		if isOverdue || isSoon {
+			count++
+			statusIcon := "⏳"
+			urgencyText := ""
+
+			if isOverdue {
+				statusIcon = "🔴"
+				urgencyText = fmt.Sprintf(" (⚠️ Просрочено на %d дн.)", -daysUntil)
+			} else if daysUntil == 0 {
+				statusIcon = "🔥"
+				urgencyText = " (сегодня!)"
+			} else {
+				urgencyText = fmt.Sprintf(" (через %d дн.)", daysUntil)
+			}
+
+			fmt.Fprintf(&b, "%s %s\n   💰 Сумма: %s\n   📅 Срок: %s%s [ID: %d]\n\n",
+				statusIcon, o.PaymentName, o.Amount.String(o.Currency), o.DueDate, urgencyText, o.ID)
+		}
+	}
+
+	if count == 0 {
+		return "🎉 У вас нет срочных уведомлений или просрочек. Всё оплачено!", nil
+	}
+
+	b.WriteString("💡 Используйте /pay для оплаты через кнопки.")
+	return b.String(), nil
 }
 
 // summaryText — сводка по всем платежам: итоги по валютам и ближайшие сроки.
