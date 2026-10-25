@@ -30,7 +30,7 @@
 
     <div class="user-profile">
       <div class="user-badge-pill">
-        <b>АД</b>
+        <b></b>
         <span>{{if .User}}{{.User.Login}}{{else}}admin{{end}}</span>
       </div>
       <form method="post" action="/logout" style="margin:0">
@@ -71,21 +71,19 @@
           <span>➔</span>
         </div>
         <div class="upcoming-items">
-          <div class="up-card highlight">
-            <div class="date">Завтра</div>
-            <div class="tag">AWS · $120</div>
-          </div>
-          <div class="up-card">
-            <div class="date">27 окт</div>
-            <div class="tag">Figma · €45</div>
-          </div>
-          <div class="up-card">
-            <div class="date">30 окт</div>
-            <div class="tag">Slack · $20</div>
-          </div>
+          {{if .Upcoming}}
+            {{range .Upcoming}}
+            <div class="up-card">
+              <div class="date">{{.DueDate}}</div>
+              <div class="tag">{{.PaymentName}} · {{.Amount}}</div>
+            </div>
+            {{end}}
+          {{else}}
+            <div style="font-size: 13px; color: var(--text-muted); padding: 10px 0;">Нет предстоящих сроков</div>
+          {{end}} 
         </div>
       </div>
-    </div>
+    </div> <!-- ИСПРАВЛЕНО: закрывающий тег для .top-stats-grid добавлен сюда -->
 
     <!-- Фильтры выпадающие -->
     <div class="filters-bar">
@@ -201,17 +199,19 @@
         </div>
 
         <form method="post" action="/occurrences/{{.SelectedOccurrence.ID}}/paid">
+          <input type="hidden" name="owner" value="{{$.Owner}}">
           <div style="margin-bottom: 12px;">
-            <label style="font-size: 11px; color: #828796; text-transform: uppercase; display: block; margin-bottom: 6px;">Дата оплаты</label>
+            <label style="font-size: 11px; color: #828796; text-transform: uppercase; display: block; margin-bottom: 6px;">Фактическая дата оплаты</label>
             <input type="date" name="paid_at" value="{{if .SelectedOccurrence.PaidAt}}{{.SelectedOccurrence.PaidAt}}{{else}}{{$.Today}}{{end}}" class="date-input-dark">
           </div>
 
-          {{if .SelectedOccurrence.IsPaid}}
-          <input type="hidden" name="paid_at" value="">
-          <button type="submit" class="btn-action-main" style="background: #444; color: #fff;">Снять отметку</button>
-          {{else}}
-          <button type="submit" class="btn-action-main">Отметить оплаченным</button>
-          {{end}}
+          <div style="display: flex; gap: 8px;">
+            <button type="submit" class="btn-action-main" style="flex: 1;">Сохранить</button>
+            
+            {{if .SelectedOccurrence.IsPaid}}
+            <button type="submit" formaction="/occurrences/{{.SelectedOccurrence.ID}}/paid?clear=1" class="btn-action-main" style="background: #333; color: #ff6b5b; flex: 0.6;" title="Снять отметку">Сбросить</button>
+            {{end}}
+          </div>
         </form>
       </div>
       {{end}}

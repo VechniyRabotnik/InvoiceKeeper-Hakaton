@@ -501,7 +501,17 @@ func dashboardRedirect(c *fiber.Ctx, query string) error {
 
 // Dashboard GET /
 func (h *Handler) Dashboard(c *fiber.Ctx) error {
-	filter, owner := parseOwner(c.Query("owner"))
+	user := h.currentUser(c)
+
+	var filter int64
+	var owner string
+	if user.IsAdmin() {
+		filter, owner = parseOwner(c.Query("owner"))
+	} else {
+		// Обычный пользователь видит строго свои платежи
+		filter = user.UserID
+		owner = strconv.FormatInt(user.UserID, 10)
+	}
 
 	sortParam := c.Query("sort", "date_asc")
 	rangeParam := c.Query("range", "all")
@@ -512,10 +522,17 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).SendString("Не удалось загрузить платежи")
 	}
-	summary, err := h.summary(filter)
+
+	var summary *app.Totals
+	if user.IsAdmin() {
+		summary, err = h.summary(filter)
+	} else {
+		summary, err = h.svc.SummaryAssigned(user.UserID)
+	}
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).SendString("Не удалось посчитать итоги")
 	}
+
 	users, err := h.userViews()
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).SendString("Не удалось загрузить пользователей")
@@ -543,6 +560,36 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 			}
 		}
 		rows = filteredStatusRows
+	}
+
+	// Ближайшие сроки для виджета
+	var upcomingList []domain.Occurrence
+	if user.IsAdmin() {
+		// Админ видит глобально ближайшие неоплаченные периоды
+		allOccs, _ := h.svc.Occurrences(0)
+		for _, o := range allOccs {
+			if o.Unpaid() && o.Active {
+				upcomingList = append(upcomingList, o)
+			}
+		}
+	} else {
+		// Обычный пользователь видит только свои ближайшие неоплаченные периоды
+		userOccs, _ := h.svc.OccurrencesFiltered(0, user.UserID)
+		for _, o := range userOccs {
+			if o.Unpaid() && o.Active {
+				upcomingList = append(upcomingList, o)
+			}
+		}
+	}
+
+	// Сортируем по дате (сначала самые близкие)
+	sort.Slice(upcomingList, func(i, j int) bool {
+		return upcomingList[i].DueDate.String() < upcomingList[j].DueDate.String()
+	})
+
+	// Ограничиваем первыми 3 элементами для виджета
+	if len(upcomingList) > 3 {
+		upcomingList = upcomingList[:3]
 	}
 
 	// Ищем выбранный элемент для правой карточки
@@ -607,6 +654,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		"OwnerQuery":         ownerParam(c.Query("owner")),
 		"Currencies":         domain.Currencies,
 		"Periods":            domain.Periods,
+		"Upcoming":           upcomingList,
 	}))
 }
 
@@ -637,18 +685,36 @@ func (h *Handler) SetOccurrenceDue(c *fiber.Ctx) error {
 }
 
 // MarkPaid POST /occurrences/:id/paid
+// MarkPaid POST /occurrences/:id/paid
 func (h *Handler) MarkPaid(c *fiber.Ctx) error {
 	id, err := idParam(c)
 	if err != nil {
 		return err
 	}
-	paidAtVal := strings.TrimSpace(c.FormValue("paid_at"))
+
+	user := h.currentUser(c)
+	occ, err := h.svc.Occurrence(id)
+	if err != nil {
+		return h.failErr(c, err)
+	}
+
+	// Обычный пользователь может менять только свои платежи
+	if !user.IsAdmin() && occ.UserID != user.UserID {
+		return c.Status(http.StatusForbidden).SendString("Доступ запрещен")
+	}
+
+	var paidAtVal string
+	if c.Query("clear") == "1" {
+		paidAtVal = ""
+	} else {
+		paidAtVal = strings.TrimSpace(c.FormValue("paid_at"))
+	}
+
 	if _, err := h.svc.SetPaid(id, paidAtVal); err != nil {
 		return h.badRequest(c, err)
 	}
 
-	user := h.currentUser(c)
-	actionDesc := "Отметил оплату периода #" + strconv.FormatInt(id, 10)
+	actionDesc := "Изменил дату оплаты периода #" + strconv.FormatInt(id, 10)
 	if paidAtVal == "" {
 		actionDesc = "Снял отметку об оплате периода #" + strconv.FormatInt(id, 10)
 	}
@@ -805,22 +871,30 @@ func (h *Handler) IndexGet(c *fiber.Ctx) error {
 }
 
 // CalendarPage отображает персональный календарь пользователя
+// CalendarPage отображает календарь оплат
 func (h *Handler) CalendarPage(c *fiber.Ctx) error {
 	user, err := h.getCurrentUser(c)
 	if err != nil {
 		return c.Redirect("/login", http.StatusFound)
 	}
 
-	if user.IsAdmin() {
-		return c.Redirect("/", http.StatusFound)
-	}
-
-	// Используем стандартный пакет time для получения текущего года и месяца
 	t := time.Now()
 	year := t.Year()
 	month := int(t.Month())
 
-	calendarDays, periodStr, err := h.svc.MonthlyCalendar(user.ID, year, month)
+	// Если пользователь — админ и не указан конкретный фильтр, можно показывать общие,
+	// но по вашему требованию для обычного пользователя (и в целом для изоляции) берем его ID.
+	// Администратор может смотреть общие данные или свои, здесь передаем ID пользователя (если не админ) или 0 (если админ хочет видеть все, либо user.ID).
+	var filterUserID int64
+	if !user.IsAdmin() {
+		filterUserID = user.ID
+	} else {
+		// Админ по умолчанию видит общий календарь, но если нужно строго по юзеру — можно тоже ограничить.
+		// Передаем 0 для админа (все платежи), либо user.ID. Сделаем гибко:
+		filterUserID = 0
+	}
+
+	calendarDays, periodStr, err := h.svc.MonthlyCalendar(filterUserID, year, month)
 	if err != nil {
 		return err
 	}
@@ -832,20 +906,24 @@ func (h *Handler) CalendarPage(c *fiber.Ctx) error {
 	})
 }
 
-// BudgetPage отображает персональный бюджет и графики пользователя
+// BudgetPage отображает бюджет и графики
 func (h *Handler) BudgetPage(c *fiber.Ctx) error {
 	user, err := h.getCurrentUser(c)
 	if err != nil {
 		return c.Redirect("/login", http.StatusFound)
 	}
 
-	if user.IsAdmin() {
-		return c.Redirect("/", http.StatusFound)
-	}
-
 	year := time.Now().Year()
 
-	budgetTotals, err := h.svc.BudgetForUser(user.ID, year, 0)
+	// Аналогично: для обычного пользователя считаем бюджет только по его ID, для админа — общий (0)
+	var filterUserID int64
+	if !user.IsAdmin() {
+		filterUserID = user.ID
+	} else {
+		filterUserID = 0
+	}
+
+	budgetTotals, err := h.svc.BudgetForUser(filterUserID, year, 0)
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@
     <nav class="nav-pills">
       <a href="/">Платежи</a>
       <a href="/calendar">Календарь</a>
-      <a href="/budget" class="active">• Бюджет</a>
+      <a href="/budget" class="active">Бюджет</a>
     </nav>
     <div class="user-badge-pill"><b>{{slice .User.Login 0 1}}</b> <span>{{.User.Login}}</span></div>
   </header>
@@ -23,102 +23,35 @@
     <div class="top-head">
       <h1 class="page-title">Бюджет</h1>
       <div style="display:flex; gap:10px;">
-        <div class="switch-pills">
-          <button>Месяц</button>
-          <button class="active">Год</button>
+        <div style="background:#fff; border:1px solid var(--border-color); border-radius:99px; padding:6px 16px; font-weight:600; font-size:13px;">
+          Год: {{.Year}}
         </div>
-        <select style="background:#fff; border:1px solid var(--border-color); border-radius:99px; padding:6px 16px; font-weight:600; font-size:13px;">
-          <option>2026</option>
-        </select>
       </div>
     </div>
 
+    {{if .Budget}}
     <div class="currency-cards-grid">
+      {{range $curr, $val := .Budget.ByCurrency}}
       <div class="currency-card">
-        <div class="curr-label"><span>₽</span> Рубли · RUB</div>
-        <div class="curr-val">₽ 1 492 680<small style="font-size:18px; font-weight:400">,00</small></div>
-        <div class="progress-bar-wrap"><div class="progress-fill" style="width: 75%;"></div></div>
+        <div class="curr-label"><span>{{$curr}}</span> Валюта · {{$curr}}</div>
+        <div class="curr-val">{{$curr}} {{printf "%.2f" $val}}</div>
+        <div class="progress-bar-wrap"><div class="progress-fill" style="width: 100%;"></div></div>
         <div class="curr-details">
-          <div><span>Оплачено</span> <span style="color:var(--success)">₽ 1 120 000</span></div>
-          <div><span>Просрочено / Не оплачено</span> <span>₽ 120 000</span></div>
-          <div><span>Запланировано</span> <span>₽ 249 700</span></div>
+          <div><span>Запланировано за год</span> <b>{{printf "%.2f" $val}} {{$curr}}</b></div>
         </div>
       </div>
-
-      <div class="currency-card">
-        <div class="curr-label"><span>$</span> Доллары · USD</div>
-        <div class="curr-val">$ 1 884<small style="font-size:18px; font-weight:400">,00</small></div>
-        <div class="progress-bar-wrap"><div class="progress-fill" style="width: 80%;"></div></div>
-        <div class="curr-details">
-          <div><span>Оплачено</span> <span style="color:var(--success)">$ 1 462</span></div>
-          <div><span>Просрочено / Не оплачено</span> <span>$ 108</span></div>
-          <div><span>Запланировано</span> <span>$ 314</span></div>
-        </div>
-      </div>
-
-      <div class="currency-card">
-        <div class="curr-label"><span>€</span> Евро · EUR</div>
-        <div class="curr-val">€ 1 260<small style="font-size:18px; font-weight:400">,00</small></div>
-        <div class="progress-bar-wrap"><div class="progress-fill" style="width: 85%;"></div></div>
-        <div class="curr-details">
-          <div><span>Оплачено</span> <span style="color:var(--success)">€ 1 005</span></div>
-          <div><span>Просрочено / Не оплачено</span> <span>€ 45</span></div>
-          <div><span>Запланировано</span> <span>€ 210</span></div>
-        </div>
-      </div>
+      {{end}}
     </div>
 
-    <div class="dark-analytics-card">
-      <div>
-        <div class="analytics-head">
-          <h2 style="font-size:20px; font-weight:500;">Расходы по месяцам · 2026</h2>
-          <div class="currency-toggle-dark">
-            <button class="active">₽ RUB</button>
-            <button>$ USD</button>
-            <button>€ EUR</button>
-          </div>
-        </div>
-
-        <div class="bars-chart">
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Янв</span></div>
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Фев</span></div>
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Мар</span></div>
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Апр</span></div>
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Май</span></div>
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Июн</span></div>
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Июл</span></div>
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Авг</span></div>
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner" style="height:120px;"></div><span class="bar-month">Сен</span></div>
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner orange" style="height:140px;"></div><span class="bar-month">Окт</span></div>
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner dashed" style="height:120px;"></div><span class="bar-month">Ноя</span></div>
-          <div class="bar-col"><span class="bar-val">124 390</span><div class="bar-inner dashed" style="height:120px;"></div><span class="bar-month">Дек</span></div>
-        </div>
-      </div>
-
-      <div class="structure-box">
-        <div>
-          <div style="font-size:12px; color:#828796; text-transform:uppercase; margin-bottom:16px;">Структура · в месяц</div>
-          
-          <div class="struct-item">
-            <div class="struct-title"><span>Аренда офиса</span> <b>₽ 120 000 · 96%</b></div>
-            <div class="struct-bar"><div class="struct-bar-fill" style="width:96%;"></div></div>
-          </div>
-          <div class="struct-item">
-            <div class="struct-title"><span>Интернет, офис</span> <b>₽ 2 500 · 2%</b></div>
-            <div class="struct-bar"><div class="struct-bar-fill" style="width:2%;"></div></div>
-          </div>
-          <div class="struct-item">
-            <div class="struct-title"><span>Хостинг Дого</span> <b>₽ 1 890 · 2%</b></div>
-            <div class="struct-bar"><div class="struct-bar-fill" style="width:2%;"></div></div>
-          </div>
-        </div>
-
-        <div>
-          <div style="font-size:11px; color:#828796;">Итого в месяц</div>
-          <div style="font-size:26px; font-weight:600; margin-top:2px;">₽ 124 390</div>
-        </div>
-      </div>
+    <div class="dark-analytics-card" style="margin-top: 24px; padding: 24px;">
+      <h2 style="font-size:18px; font-weight:500; margin-bottom: 12px;">Сводка по периоду · {{.Budget.Period}}</h2>
+      <p style="color: var(--text-muted); font-size: 14px;">Всего активных плановых шаблонов в расчете бюджета: <b>{{.Budget.TotalCount}}</b></p>
     </div>
+    {{else}}
+    <div style="text-align: center; padding: 60px; color: #828796;">
+      <h3>Данные бюджета недоступны</h3>
+    </div>
+   {{end}}
   </main>
 </body>
 </html>

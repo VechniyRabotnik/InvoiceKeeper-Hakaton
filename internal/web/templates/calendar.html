@@ -13,7 +13,7 @@
     <a href="/" class="brand"><div class="brand-icon">$</div> PayDay</a>
     <nav class="nav-pills">
       <a href="/">Платежи</a>
-      <a href="/calendar" class="active">+ Календарь</a>
+      <a href="/calendar" class="active">Календарь</a>
       <a href="/budget">Бюджет</a>
     </nav>
     <div class="user-badge-pill"><b>{{slice .User.Login 0 1}}</b> <span>{{.User.Login}}</span></div>
@@ -24,11 +24,9 @@
       <h1 class="page-title">Календарь</h1>
       <div style="display:flex; gap:10px;">
         <div class="month-selector">
-          <button>‹</button>
-          <span>Октябрь 2026</span>
-          <button>›</button>
+          <span>{{.Period}}</span>
         </div>
-        <button class="btn-today">Сегодня</button>
+        <a href="/calendar" class="btn-today" style="text-decoration:none; display:inline-flex; align-items:center; padding: 6px 14px; background:var(--card-light); border-radius:99px; font-size:13px; color:inherit;">Сегодня</a>
       </div>
     </div>
 
@@ -39,107 +37,32 @@
         </div>
 
         <div class="calendar-grid-body">
-          <!-- Пустые/прошлые дни -->
-          <div class="day-cell other-month"><span class="day-num">28</span></div>
-          <div class="day-cell other-month"><span class="day-num">29</span></div>
-          <div class="day-cell other-month"><span class="day-num">30</span></div>
-          <div class="day-cell"><span class="day-num">1</span></div>
-          <div class="day-cell"><span class="day-num">2</span></div>
-          <div class="day-cell"><span class="day-num">3</span></div>
-          <div class="day-cell"><span class="day-num">4</span></div>
-
-          <div class="day-cell">
-            <span class="day-num">5</span>
-            <span class="day-pill-tag tag-purple">Selectel · $30</span>
-          </div>
-          <div class="day-cell"><span class="day-num">6</span></div>
-          <div class="day-cell"><span class="day-num">7</span></div>
-          <div class="day-cell">
-            <span class="day-num">8</span>
-            <span class="day-pill-tag tag-purple">GitHub · $10</span>
-          </div>
-          <div class="day-cell"><span class="day-num">9</span></div>
-          <div class="day-cell">
-            <span class="day-num">10</span>
-            <span class="day-pill-tag tag-purple">Аренда · 25 000</span>
-          </div>
-          <div class="day-cell"><span class="day-num">11</span></div>
-
-          <div class="day-cell"><span class="day-num">12</span></div>
-          <div class="day-cell"><span class="day-num">13</span></div>
-          <div class="day-cell"><span class="day-num">14</span></div>
-          <div class="day-cell">
-            <span class="day-num">15</span>
-            <span class="day-pill-tag tag-purple">Интернет · 2 500</span>
-          </div>
-          <div class="day-cell"><span class="day-num">16</span></div>
-          <div class="day-cell"><span class="day-num">17</span></div>
-          <div class="day-cell"><span class="day-num">18</span></div>
-
-          <div class="day-cell"><span class="day-num">19</span></div>
-          <div class="day-cell">
-            <span class="day-num">20</span>
-            <span class="day-pill-tag tag-red">Сервер · $120.00</span>
-          </div>
-          <div class="day-cell"><span class="day-num">21</span></div>
-          <div class="day-cell"><span class="day-num">22</span></div>
-          <div class="day-cell"><span class="day-num">23</span></div>
-          <div class="day-cell selected"><span class="day-num">24 <small style="font-weight:400; font-size:10px;">Пятница</small></span></div>
-          <div class="day-cell active-black">
-            <span class="day-num">25</span>
-            <span class="day-pill-tag tag-dark">Hetzner · $88</span>
-          </div>
-
-          <div class="day-cell"><span class="day-num">26</span></div>
-          <div class="day-cell">
-            <span class="day-num">27</span>
-            <span class="day-pill-tag tag-purple">Figma · €45</span>
-          </div>
-          <div class="day-cell"><span class="day-num">28</span></div>
-          <div class="day-cell"><span class="day-num">29</span></div>
-          <div class="day-cell">
-            <span class="day-num">30</span>
-            <span class="day-pill-tag tag-purple">Slack · $20</span>
-          </div>
-          <div class="day-cell"><span class="day-num">31</span></div>
-          <div class="day-cell other-month"><span class="day-num">1</span></div>
+          {{if .CalendarDays}}
+            {{range .CalendarDays}}
+            <div class="day-cell {{if .Items}}active-black{{end}}">
+              <span class="day-num">{{.Date}}</span>
+              {{range .Items}}
+                {{if .PaidAt}}
+                  <span class="day-pill-tag tag-purple">{{.PaymentName}} · {{.Amount}}</span>
+                {{else if eq .Status "overdue"}}
+                  <span class="day-pill-tag tag-red">{{.PaymentName}} · {{.Amount}}</span>
+                {{else}}
+                  <span class="day-pill-tag tag-dark">{{.PaymentName}} · {{.Amount}}</span>
+                {{end}}
+              {{end}}
+            </div>
+            {{end}}
+          {{else}}
+            <div style="grid-column: span 7; text-align: center; padding: 40px; color: #828796;">
+              На этот период платежей не найдено
+            </div>
+          {{end}}
         </div>
 
         <div class="cal-legend">
           <div><span class="legend-dot" style="background:var(--accent-purple)"></span> Оплачено</div>
           <div><span class="legend-dot" style="background:#828796"></span> Не оплачено</div>
           <div><span class="legend-dot" style="background:var(--danger)"></span> Просрочено</div>
-        </div>
-      </div>
-
-      <!-- Сайдбар выбранной даты -->
-      <div class="cal-sidebar">
-        <div>
-          <div class="cal-sidebar-head">Суббота</div>
-          <div class="cal-sidebar-date">25 октября</div>
-        </div>
-
-        <div class="event-card-dark">
-          <div>
-            <div style="font-weight:600; font-size:15px;">Сервер Hetzner</div>
-            <div style="font-size:12px; color:#828796;">Не оплачено · срок 25 окт</div>
-          </div>
-          <div style="font-weight:600; font-size:16px;">88,00 $</div>
-        </div>
-
-        <button class="btn-action-purple">✓ Отметить оплаченным</button>
-
-        <div class="summary-card-dark">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <span style="font-size:12px; color:#828796;">Итого на дату</span>
-            <span style="font-size:11px; background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:99px;">📅 25.10.2026</span>
-          </div>
-          <div class="row"><span>Итого в RUB</span> <b style="font-size:16px;">120 000,00 ₽</b></div>
-          <div class="row"><span>Итого в USD</span> <b style="font-size:16px;">$ 108.00</b></div>
-          <div class="row"><span>Итого в EUR</span> <b style="font-size:16px;">€ 45.00</b></div>
-          <div style="font-size:11px; color:#828796; margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:8px;">
-            Всего к оплате: <b>₽ 4 200 · $ 40 · € 60</b>
-          </div>
         </div>
       </div>
     </div>

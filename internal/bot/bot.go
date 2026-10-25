@@ -403,12 +403,12 @@ func helpText() string {
 	return "🤖 Доступные команды Invoice Keeper:\n\n" +
 		"📊 Информация и отчеты:\n" +
 		"• /summary — Общие итоги и ближайшие платежи\n" +
-		"• /payments — Список ваших платежей (можно указать месяц, например: <code>/payments 2026-11</code>)\n" +
+		"• /payments — Список ваших платежей (можно указать месяц, например: /payments 2026-11)\n" +
 		"• /overdue — Ваши текущие просрочки по оплате\n\n" +
 		"💳 Управление платежами:\n" +
 		"• /pay — Выбрать неоплаченный платеж и отметить его оплаченным через кнопки\n" +
 		"• /unpay — Отменить отметку об оплате (снять статус)\n" +
-		"• /setdate <code>ID дата</code> — Указать или изменить фактическую дату оплаты (например: <code>/setdate 15 2026-10-24</code>)\n\n" +
+		"• /setdate ID дата — Указать или изменить фактическую дату оплаты (например: /setdate 15 2026-10-24)\n\n" +
 		"⚙️ Настройка и чат:\n" +
 		"• /start — Подписаться на автоматические напоминания\n" +
 		"• /unsubscribe — Отписаться от напоминаний\n" +
@@ -595,7 +595,6 @@ func sendPaymentButton(ch Channel, chatID string, text string, occurrenceID int6
 func startText(chatID string) string {
 	return "Готово, напоминания включены.\n\n" +
 		"ID этого чата: " + chatID + "\n" +
-		"Совет: внеси его в .env как TELEGRAM_CHAT_ID, и подписка перестанет быть нужной.\n\n" +
 		helpText()
 }
 
@@ -883,7 +882,7 @@ func handleSetDateCommand(svc *app.App, chatID string, text string) (string, err
 
 	parts := strings.Fields(text)
 	if len(parts) < 3 {
-		return "⚠️ Неверный формат. Используйте команду так:\n<code>/setdate ID 2026-10-24</code>\n(ID периода можно узнать через /payments)", nil
+		return "⚠️ Неверный формат. Используйте команду так:\n/setdate ID 2026-10-24\n(ID периода можно узнать через /payments)", nil
 	}
 
 	occurrenceID, err := strconv.ParseInt(parts[1], 10, 64)
