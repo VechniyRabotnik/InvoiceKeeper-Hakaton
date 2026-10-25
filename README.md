@@ -188,6 +188,12 @@ docs/openapi.yml     спецификация API
 deploy/              скрипт установки, systemd-юнит, конфиг nginx
 ```
 
+## Реализация
+
+```
+http://194.113.106.231:8080/
+```
+
 ## Лицензия
 
 Apache License 2.0 — см. [LICENSE](LICENSE).
