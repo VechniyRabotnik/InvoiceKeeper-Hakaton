@@ -1,0 +1,166 @@
+{{define "users"}}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PayDay · Пользователи</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="page-users">
+
+  <header>
+    <a href="/" class="brand">
+      <div class="brand-icon">$</div>
+      PayDay
+    </a>
+
+    <nav class="nav-pills">
+      <a href="/">Платежи</a>
+      <a href="/payments">Регулярные</a>
+      <a href="/users" class="active">Пользователи</a>
+      <a href="/journal">Журнал</a>
+    </nav>
+
+    <div class="user-profile">
+      <div class="user-badge-pill">
+        <b></b>
+        <span>{{if .User}}{{.User.Login}}{{else}}admin{{end}}</span>
+      </div>
+      <form method="post" action="/logout" style="margin:0">
+        <button class="btn-logout" title="Выйти"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
+      </form>
+    </div>
+  </header>
+
+  <main>
+    <div class="page-header-row">
+      <h1 class="page-title">Пользователи</h1>
+      <button class="btn-primary-pill" onclick="document.getElementById('modal-create').style.display='flex'">
+        <span>+ Новый пользователь</span>
+      </button>
+    </div>
+
+    {{if .Error}}<div class="flash">{{.Error}}</div>{{end}}
+    {{if .Notice}}<div class="flash ok">{{.Notice}}</div>{{end}}
+
+    <div class="top-info-grid">
+      <div class="info-banner">
+        <strong>Доступ в веб-панель</strong>
+        Администратор может создавать пользователей, выдавать им пароли для входа в индивидуальную панель, а также привязывать Telegram Chat ID.
+      </div>
+      <div class="info-banner">
+        <strong>Управление ролями</strong>
+        Логин администратора задается в файле <code>.env</code> и не подлежит изменению через интерфейс панели.
+      </div>
+    </div>
+
+    <!-- Модальное окно создания пользователя с паролем -->
+    <div id="modal-create" class="modal-overlay">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h3>Новый пользователь</h3>
+          <button class="modal-close" onclick="document.getElementById('modal-create').style.display='none'">✕</button>
+        </div>
+        <form method="post" action="/users">
+          <div class="field">
+            <label>Логин</label>
+            <input name="login" placeholder="ivan_user" required minlength="3" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Пароль для веб-панели</label>
+            <input type="password" name="password" placeholder="••••••••" required minlength="4">
+          </div>
+          <div style="background: #f7f4fc; padding: 12px; border-radius: 12px; font-size: 12.5px; color: #666; margin-bottom: 16px;">
+            🔑 Пользователь сможет использовать этот логин и пароль для входа в систему.
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-primary-pill" style="background:#eee;" onclick="document.getElementById('modal-create').style.display='none'">Отмена</button>
+            <button type="submit" class="btn-primary-pill" style="background:var(--accent-purple);">Создать пользователя</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Темная карточка списка учетных записей -->
+    <div class="dark-card">
+      <div class="dark-card-header">
+        <div class="dark-card-title">Учётные записи</div>
+      </div>
+
+      {{if .Users}}
+      <table class="payday-table">
+        <thead>
+          <tr>
+            <th>Пользователь</th>
+            <th>Telegram Chat ID</th>
+            <th class="num">Платежей</th>
+            <th>Создан</th>
+            <th>Изменение данных и пароля</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Users}}
+          <tr>
+            <td>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="user-avatar-badge">{{slice .Login 0 1}}</div>
+                <div>
+                  <div style="font-weight: 600; font-size: 15px;">{{.Login}}</div>
+                  {{if .IsAdmin}}
+                    <span class="badge-role b-admin">администратор</span>
+                  {{else}}
+                    <span class="badge-role b-user">пользователь</span>
+                  {{end}}
+                </div>
+              </div>
+            </td>
+            <td>
+              {{if .IsAdmin}}
+                <span style="color:#666">—</span>
+              {{else}}
+                <form method="post" action="/users/{{.ID}}/chat" style="display:inline-flex; gap:6px;">
+                  <input name="tg_chat_id" value="{{.TGChatID}}" placeholder="Chat ID" style="width:130px; padding:6px 10px; font-size:13px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; border-radius:8px;">
+                  <button class="btn-action-icon" title="Сохранить чат" style="background:rgba(255,255,255,0.08); padding:6px 10px; font-size:12px; color:#c4b5fd;">Привязать</button>
+                </form>
+              {{end}}
+            </td>
+            <td class="num" style="font-weight:600;">
+              {{if .IsAdmin}}<span style="color:#666">—</span>
+              {{else if gt .Payments 0}}<a href="/?owner={{.ID}}" style="color:#c4b5fd; text-decoration:none;">{{.Payments}}</a>
+              {{else}}<span style="color:#666">0</span>{{end}}
+            </td>
+            <td style="color:#828796; font-size:13px;">{{.CreatedAt.Format "02.01.2006"}}</td>
+            <td>
+              <div style="display:inline-flex; gap:6px; align-items:center;">
+                {{if not .IsAdmin}}
+                <form method="post" action="/users/{{.ID}}" style="display:inline-flex; gap:6px; align-items:center;">
+                  <input name="login" value="{{.Login}}" minlength="3" required style="width:105px; padding:6px 10px; font-size:13px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; border-radius:8px;" title="Логин">
+                  <input type="password" name="password" placeholder="Новый пароль" style="width:115px; padding:6px 10px; font-size:13px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; border-radius:8px;" title="Оставьте пустым, если не нужно менять">
+                  <button class="btn-action-icon" title="Сохранить" style="background:rgba(255,255,255,0.08); padding:6px 10px; font-size:12px; color:#fff;">ОК</button>
+                </form>
+                <form method="post" action="/users/{{.ID}}/delete" style="margin:0" onsubmit="return confirm('Удалить пользователя {{.Login}}?')">
+                  <button class="btn-action-icon danger" title="Удалить">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  </button>
+                </form>
+                {{else}}
+                <span style="color:#828796; font-size:12.5px;">управляется .env</span>
+                {{end}}
+              </div>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      <div style="text-align: center; padding: 60px; color: #828796;">
+        <h3>Пользователей нет</h3>
+      </div>
+      {{end}}
+    </div>
+  </main>
+
+</body>
+</html>
+{{end}}

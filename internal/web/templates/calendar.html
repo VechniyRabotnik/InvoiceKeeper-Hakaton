@@ -1,0 +1,72 @@
+{{define "calendar"}}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PayDay · Календарь</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="page-calendar">
+
+  <header>
+    <a href="/" class="brand"><div class="brand-icon">$</div> PayDay</a>
+    <nav class="nav-pills">
+      <a href="/">Платежи</a>
+      <a href="/calendar" class="active">Календарь</a>
+      <a href="/budget">Бюджет</a>
+    </nav>
+    <div class="user-badge-pill"><b>{{slice .User.Login 0 1}}</b> <span>{{.User.Login}}</span></div>
+  </header>
+
+  <main>
+    <div class="top-head">
+      <h1 class="page-title">Календарь</h1>
+      <div style="display:flex; gap:10px;">
+        <div class="month-selector">
+          <span>{{.Period}}</span>
+        </div>
+        <a href="/calendar" class="btn-today" style="text-decoration:none; display:inline-flex; align-items:center; padding: 6px 14px; background:var(--card-light); border-radius:99px; font-size:13px; color:inherit;">Сегодня</a>
+      </div>
+    </div>
+
+    <div class="calendar-workspace">
+      <div class="calendar-card">
+        <div class="calendar-grid-header">
+          <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Вс</div>
+        </div>
+
+        <div class="calendar-grid-body">
+          {{if .CalendarDays}}
+            {{range .CalendarDays}}
+            <div class="day-cell {{if .Items}}active-black{{end}}">
+              <span class="day-num">{{.Date}}</span>
+              {{range .Items}}
+                {{if .PaidAt}}
+                  <span class="day-pill-tag tag-purple">{{.PaymentName}} · {{.Amount}}</span>
+                {{else if eq .Status "overdue"}}
+                  <span class="day-pill-tag tag-red">{{.PaymentName}} · {{.Amount}}</span>
+                {{else}}
+                  <span class="day-pill-tag tag-dark">{{.PaymentName}} · {{.Amount}}</span>
+                {{end}}
+              {{end}}
+            </div>
+            {{end}}
+          {{else}}
+            <div style="grid-column: span 7; text-align: center; padding: 40px; color: #828796;">
+              На этот период платежей не найдено
+            </div>
+          {{end}}
+        </div>
+
+        <div class="cal-legend">
+          <div><span class="legend-dot" style="background:var(--accent-purple)"></span> Оплачено</div>
+          <div><span class="legend-dot" style="background:#828796"></span> Не оплачено</div>
+          <div><span class="legend-dot" style="background:var(--danger)"></span> Просрочено</div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
+{{end}}

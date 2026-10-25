@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main, testing-branch]
+  pull_request:
+
+# Репозиторий публичный, а сборка не публикует артефакты: достаточно прав на
+# чтение кода. Запись не требуется ни одному шагу.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Формат, статанализ, тесты, сборка
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Проверка зависимостей
+        run: |
+          go mod tidy -diff
+          go mod verify
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Не отформатировано gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Тесты
+        run: go test -race -count=1 ./...
+
+      - name: Сборка
+        run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o invoice-keeper ./cmd/server
+
+      - name: Артефакт бинарника
+        uses: actions/upload-artifact@v4
+        with:
+          name: invoice-keeper-linux-amd64
+          path: invoice-keeper
+          retention-days: 7
+
+  docker:
+    name: Сборка Docker-образа
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Только проверка, что образ собирается: публикации в registry нет,
+      # поэтому логин в Docker не выполняется и секреты не нужны.
+      - name: docker build
+        run: docker build -t invoice-keeper:ci .

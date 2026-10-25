@@ -1,0 +1,10 @@
+# В образ не попадают локальные настройки, база и артефакты сборки.
+.git
+.gitignore
+.env
+data/
+deploy/
+*.md
+LICENSE
+Dockerfile
+docker-compose.yml

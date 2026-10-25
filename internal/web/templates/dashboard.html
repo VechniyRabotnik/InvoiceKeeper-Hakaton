@@ -1,0 +1,224 @@
+{{define "dashboard"}}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PayDay · Платежи</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="page-dashboard">
+
+  <header>
+    <a href="/" class="brand">
+      <div class="brand-icon">$</div>
+      PayDay
+    </a>
+
+    <nav class="nav-pills">
+      {{if .User.IsAdmin}}
+        <a href="/" class="active">Платежи</a>
+        <a href="/payments">Регулярные</a>
+        <a href="/users">Пользователи</a>
+        <a href="/journal">Журнал</a>
+      {{else}}
+        <a href="/">Платежи</a>
+        <a href="/calendar">Календарь</a>
+        <a href="/budget">Бюджет</a>
+      {{end}}
+    </nav>
+
+    <div class="user-profile">
+      <div class="user-badge-pill">
+        <b></b>
+        <span>{{if .User}}{{.User.Login}}{{else}}admin{{end}}</span>
+      </div>
+      <form method="post" action="/logout" style="margin:0">
+        <button class="btn-logout" title="Выйти">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+        </button>
+      </form>
+    </div>
+  </header>
+
+  <main>
+    <h1 class="page-title">Платежи <small>(на {{.Today}})</small></h1>
+
+    <div class="top-stats-grid">
+      {{range .Summary.ByCurrency}}
+      <div class="stat-box">
+        <div class="stat-header">
+          <span>{{.Currency}} · {{.Count}} периодов</span>
+        </div>
+        <div class="stat-amount">{{printf "%.2f" .Total}} <small style="font-size:16px; font-weight:400">{{.Currency}}</small></div>
+        <div class="stat-subtext">Всего к оплате</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" style="width: {{if gt .Total 0.0}}{{printf "%.0f" (div .Paid .Total)}}{{else}}0{{end}}%;"></div>
+        </div>
+        <div class="stat-details-row">
+          <div><span>Оплачено</span> <span style="color:var(--success)">{{printf "%.2f" .Paid}}</span></div>
+          <div><span>Не оплачено</span> <span>{{printf "%.2f" .Outstanding}}</span></div>
+          {{if gt .Overdue 0.0}}
+          <div><span>Просрочено</span> <span style="color:var(--danger)">{{printf "%.2f" .Overdue}}</span></div>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
+
+      <div class="upcoming-box">
+        <div class="stat-header">
+          <span>Ближайшие сроки</span>
+          <span>➔</span>
+        </div>
+        <div class="upcoming-items">
+          {{if .Upcoming}}
+            {{range .Upcoming}}
+            <div class="up-card">
+              <div class="date">{{.DueDate}}</div>
+              <div class="tag">{{.PaymentName}} · {{.Amount}}</div>
+            </div>
+            {{end}}
+          {{else}}
+            <div style="font-size: 13px; color: var(--text-muted); padding: 10px 0;">Нет предстоящих сроков</div>
+          {{end}} 
+        </div>
+      </div>
+    </div> <!-- ИСПРАВЛЕНО: закрывающий тег для .top-stats-grid добавлен сюда -->
+
+    <!-- Фильтры выпадающие -->
+    <div class="filters-bar">
+      <form method="get" action="/" style="display:flex; gap:10px; width:100%;">
+        <input type="hidden" name="status" value="{{.Status}}">
+        <select name="range" class="filter-pill" onchange="this.form.submit()">
+          <option value="all" {{if eq .Range "all"}}selected{{end}}>Все будущие периоды</option>
+          <option value="1m" {{if eq .Range "1m"}}selected{{end}}>Ближайший 1 месяц</option>
+          <option value="3m" {{if eq .Range "3m"}}selected{{end}}>Ближайшие 3 месяца</option>
+        </select>
+
+        <select name="sort" class="filter-pill" onchange="this.form.submit()">
+          <option value="date_asc" {{if eq .Sort "date_asc"}}selected{{end}}>По сроку (сначала близкие)</option>
+          <option value="date_desc" {{if eq .Sort "date_desc"}}selected{{end}}>По сроку (сначала далекие)</option>
+        </select>
+
+        <select name="owner" class="filter-pill" onchange="this.form.submit()">
+          <option value="all" {{if eq .Owner "all"}}selected{{end}}>Все ответственные</option>
+          <option value="none" {{if eq .Owner "none"}}selected{{end}}>Без ответственного</option>
+          {{$owner := .Owner}}
+          {{range .Users}}
+          <option value="{{.ID}}" {{if eq $owner (printf "%d" .ID)}}selected{{end}}>{{.Login}}</option>
+          {{end}}
+        </select>
+      </form>
+    </div>
+
+    <div class="workspace {{if not .SelectedOccurrence}}full{{end}}">
+      
+      <div class="dark-card">
+        <div class="table-subhead">
+          <h2>Платежи · октябрь 2026</h2>
+          <!-- Рабочие вкладки статусов -->
+          <div class="status-tabs">
+            <a href="/?status=all&owner={{.Owner}}&sort={{.Sort}}&range={{.Range}}{{if .SelectedID}}&select={{.SelectedID}}{{end}}" class="{{if eq .Status "all"}}active{{end}}">Все</a>
+            <a href="/?status=unpaid&owner={{.Owner}}&sort={{.Sort}}&range={{.Range}}{{if .SelectedID}}&select={{.SelectedID}}{{end}}" class="{{if eq .Status "unpaid"}}active{{end}}">Не оплачено</a>
+            <a href="/?status=paid&owner={{.Owner}}&sort={{.Sort}}&range={{.Range}}{{if .SelectedID}}&select={{.SelectedID}}{{end}}" class="{{if eq .Status "paid"}}active{{end}}">Оплачено</a>
+            <a href="/?status=overdue&owner={{.Owner}}&sort={{.Sort}}&range={{.Range}}{{if .SelectedID}}&select={{.SelectedID}}{{end}}" class="{{if eq .Status "overdue"}}active{{end}}">Просрочено</a>
+          </div>
+        </div>
+
+        {{if .Rows}}
+        <table class="payday-table">
+          <thead>
+            <tr>
+              <th>Платёж</th>
+              <th>Статус</th>
+              <th>Ответственный</th>
+              <th>Оплачено</th>
+              <th>Сумма</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Rows}}
+            <tr onclick="location.href='/?select={{.ID}}&status={{$.Status}}&owner={{$.Owner}}&sort={{$.Sort}}&range={{$.Range}}'" 
+                class="{{if eq $.SelectedID .ID}}selected{{end}}">
+              <td>
+                <div style="font-weight: 500; font-size:15px; margin-bottom:2px;">{{.PaymentName}}</div>
+                <div style="font-size: 12px; color: #828796;">Срок {{.DueDate}}</div>
+              </td>
+              <td><span class="badge-status b-{{.Status}}">{{.StatusLabel}}</span></td>
+              <td style="color: #828796; font-size: 13px;">{{if .UserName}}{{.UserName}}{{else}}—{{end}}</td>
+              <td style="color: #828796;">{{if .PaidAt}}{{.PaidAt}}{{else}}—{{end}}</td>
+              <td style="font-weight: 600; font-variant-numeric: tabular-nums;">{{.Amount}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+        {{else}}
+        <div style="text-align: center; padding: 50px; color: #828796;">
+          <h3>Платежей по данному фильтру не найдено</h3>
+        </div>
+        {{end}}
+      </div>
+
+      {{if .SelectedOccurrence}}
+      <div class="detail-sidebar">
+        <div class="sidebar-top">
+          <div>
+            <span style="font-size: 11px; color: #828796; text-transform: uppercase;">Период · октябрь 2026</span>
+            <h3>{{.SelectedOccurrence.PaymentName}}</h3>
+          </div>
+          <a href="/?status={{.Status}}&owner={{.Owner}}&sort={{.Sort}}&range={{.Range}}" style="color:#828796; text-decoration:none; font-size:18px;">✕</a>
+        </div>
+
+        <div>
+          <span class="badge-status b-{{.SelectedOccurrence.Status}}">{{.SelectedOccurrence.StatusLabel}}</span>
+        </div>
+
+        <div class="info-grid-2">
+          <div class="info-card-gray">
+            <div class="lbl">Сумма</div>
+            <div class="val">{{.SelectedOccurrence.Amount}}</div>
+          </div>
+          <div class="info-card-gray">
+            <div class="lbl">Срок оплаты</div>
+            <div class="val" style="font-size: 15px; margin-top:2px;">{{.SelectedOccurrence.DueDate}}</div>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 11px; color: #828796; text-transform: uppercase; margin-bottom: 8px;">История периодов</div>
+          <div class="history-periods">
+            <div class="hist-item">Авг<br><b>20 авг</b></div>
+            <div class="hist-item">Сен<br><b>19 сен</b></div>
+            <div class="hist-item active">Окт<br><b>ожидает</b></div>
+            <div class="hist-item">Ноя<br><b>ожидает</b></div>
+          </div>
+        </div>
+
+        <div style="font-size: 12px; color: #828796; display: flex; align-items: center; gap: 6px;">
+          <span>✈️ Напоминание отправлено в Telegram</span>
+        </div>
+
+        <form method="post" action="/occurrences/{{.SelectedOccurrence.ID}}/paid">
+          <input type="hidden" name="owner" value="{{$.Owner}}">
+          <div style="margin-bottom: 12px;">
+            <label style="font-size: 11px; color: #828796; text-transform: uppercase; display: block; margin-bottom: 6px;">Фактическая дата оплаты</label>
+            <input type="date" name="paid_at" value="{{if .SelectedOccurrence.PaidAt}}{{.SelectedOccurrence.PaidAt}}{{else}}{{$.Today}}{{end}}" class="date-input-dark">
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <button type="submit" class="btn-action-main" style="flex: 1;">Сохранить</button>
+            
+            {{if .SelectedOccurrence.IsPaid}}
+            <button type="submit" formaction="/occurrences/{{.SelectedOccurrence.ID}}/paid?clear=1" class="btn-action-main" style="background: #333; color: #ff6b5b; flex: 0.6;" title="Снять отметку">Сбросить</button>
+            {{end}}
+          </div>
+        </form>
+      </div>
+      {{end}}
+
+    </div>
+  </main>
+
+</body>
+</html>
+{{end}}
