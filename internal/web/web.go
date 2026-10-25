@@ -877,6 +877,9 @@ func (h *Handler) CalendarPage(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Redirect("/login", http.StatusFound)
 	}
+	if user.IsAdmin() {
+		return c.Redirect("/", http.StatusFound)
+	}
 
 	t := time.Now()
 	year := t.Year()
@@ -911,6 +914,10 @@ func (h *Handler) BudgetPage(c *fiber.Ctx) error {
 	user, err := h.getCurrentUser(c)
 	if err != nil {
 		return c.Redirect("/login", http.StatusFound)
+	}
+
+	if user.IsAdmin() {
+		return c.Redirect("/", http.StatusFound)
 	}
 
 	year := time.Now().Year()
